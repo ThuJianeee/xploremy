@@ -1,0 +1,45 @@
+name: xploremy
+description: XploreMY - a unified Malaysian public transport companion built on MAMPU's DTSA open data (SDG 9).
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # State management
+  provider: ^6.1.2
+
+  # Backend / auth (Supabase)
+  supabase_flutter: ^2.8.0
+
+  # Networking + GTFS
+  http: ^1.2.2
+  archive: ^3.6.1
+  csv: ^6.0.0
+  gtfs_realtime_bindings: ^1.0.0
+
+  # Location + maps (OpenStreetMap tiles, no API key needed)
+  geolocator: ^13.0.1
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+
+  # Offline cache
+  sqflite: ^2.3.3
+  path: ^1.9.0
+  path_provider: ^2.1.4
+  shared_preferences: ^2.3.2
+
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
