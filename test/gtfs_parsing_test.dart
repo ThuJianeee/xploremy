@@ -33,6 +33,15 @@ void main() {
       expect(formatDistance(450), '450 m');
       expect(formatDistance(2350), '2.4 km');
     });
+
+    test('labels tomorrow instead of hiding a 24-hour wrap', () {
+      final now = DateTime(2026, 9, 2, 23, 30);
+      final departure = DateTime(2026, 9, 3, 6, 0);
+      expect(
+        formatDepartureTime(departure, now: now),
+        'Tomorrow 06:00',
+      );
+    });
   });
 
   group('haversine', () {

@@ -75,6 +75,23 @@ List<GtfsStaticFeed> buildMockFeeds() {
       routes: [route],
       trips: trips,
       stopTimes: stopTimes,
+      calendar: [
+        GtfsCalendarService(
+          operatorId: op.id,
+          serviceId: 'daily',
+          monday: true,
+          tuesday: true,
+          wednesday: true,
+          thursday: true,
+          friday: true,
+          saturday: true,
+          sunday: true,
+          startDate: 20200101,
+          endDate: 20991231,
+        ),
+      ],
+      calendarDates: const [],
+      frequencies: const [],
       fetchedAt: now,
     );
   }

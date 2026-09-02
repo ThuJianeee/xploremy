@@ -12,7 +12,8 @@ import '../../data/models.dart';
 import '../../data/transit_repository.dart';
 import '../auth/auth_service.dart';
 
-/// MODULE 3 — Stop detail / live departures.
+/// Stop details with calendar/frequency-aware departures and live vehicle
+/// positions where the official data.gov.my feed supports them.
 class StopDetailScreen extends StatefulWidget {
   const StopDetailScreen({super.key, required this.stop});
 
@@ -26,16 +27,19 @@ class _StopDetailScreenState extends State<StopDetailScreen> {
   List<Departure> _departures = const [];
   List<GtfsStop> _shape = const [];
   List<VehiclePosition> _vehicles = const [];
-  CrowdLevel _crowd = CrowdLevel.quiet;
   bool _loading = true;
   bool _isFavourite = false;
+  DateTime? _updatedAt;
   Timer? _ticker;
 
   @override
   void initState() {
     super.initState();
     _load();
-    _ticker = Timer.periodic(const Duration(seconds: 30), (_) => _load(quiet: true));
+    _ticker = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _load(quiet: true),
+    );
   }
 
   @override
@@ -45,7 +49,7 @@ class _StopDetailScreenState extends State<StopDetailScreen> {
   }
 
   Future<void> _load({bool quiet = false}) async {
-    if (!quiet) setState(() => _loading = true);
+    if (!quiet && mounted) setState(() => _loading = true);
     final repo = context.read<TransitRepository>();
     final auth = context.read<AuthService>();
 
@@ -53,8 +57,6 @@ class _StopDetailScreenState extends State<StopDetailScreen> {
       operatorId: widget.stop.operatorId,
       stopId: widget.stop.stopId,
     );
-    final crowd =
-        await repo.crowdLevel(widget.stop.operatorId, widget.stop.stopId);
     final shape = departures.isEmpty
         ? <GtfsStop>[]
         : await repo.tripShape(widget.stop.operatorId, departures.first.tripId);
@@ -64,17 +66,21 @@ class _StopDetailScreenState extends State<StopDetailScreen> {
     if (auth.isSignedIn) {
       try {
         final favourites = await auth.favouriteStops();
-        favourite = favourites.any((f) => f.stopId == widget.stop.stopId);
+        favourite = favourites.any(
+          (f) =>
+              f.stopId == widget.stop.stopId &&
+              f.operatorId == widget.stop.operatorId,
+        );
       } catch (_) {}
     }
 
     if (!mounted) return;
     setState(() {
       _departures = departures;
-      _crowd = crowd;
       _shape = shape;
       _vehicles = vehicles;
       _isFavourite = favourite;
+      _updatedAt = DateTime.now();
       _loading = false;
     });
   }
@@ -94,8 +100,9 @@ class _StopDetailScreenState extends State<StopDetailScreen> {
       if (mounted) setState(() => _isFavourite = !_isFavourite);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Could not save: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not save: $e')),
+        );
       }
     }
   }
@@ -128,18 +135,34 @@ class _StopDetailScreenState extends State<StopDetailScreen> {
                   const SizedBox(height: 18),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Text('Next departures',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700)),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Next departures',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        if (_updatedAt != null)
+                          Text(
+                            'Updated ${formatClockTime(_updatedAt!)}',
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              color: AppTheme.slate,
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 10),
                   if (_departures.isEmpty)
                     const Padding(
                       padding: EdgeInsets.all(24),
                       child: Text(
-                        'No more scheduled departures from this stop today.',
+                        'No upcoming departures are published for this stop.',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: AppTheme.slate),
                       ),
@@ -163,22 +186,22 @@ class _StopDetailScreenState extends State<StopDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(op.name,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w600, color: AppTheme.trackNavy)),
+            Text(
+              op.name,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: AppTheme.trackNavy,
+              ),
+            ),
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
                 _pill(
-                  icon: Icons.groups_outlined,
-                  label: _crowd.label,
-                  color: switch (_crowd) {
-                    CrowdLevel.busy => AppTheme.hibiscus,
-                    CrowdLevel.moderate => AppTheme.delayed,
-                    CrowdLevel.quiet => AppTheme.onTime,
-                  },
+                  icon: Icons.event_available_outlined,
+                  label: 'Official GTFS timetable',
+                  color: AppTheme.onTime,
                 ),
                 _pill(
                   icon: op.hasRealtime ? Icons.sensors : Icons.schedule,
@@ -188,6 +211,17 @@ class _StopDetailScreenState extends State<StopDetailScreen> {
                   color: op.hasRealtime ? AppTheme.signalTeal : AppTheme.slate,
                 ),
               ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              op.hasRealtime
+                  ? 'Live markers use the official vehicle-position feed. Departure times remain scheduled because the public API does not currently provide TripUpdates.'
+                  : 'This operator does not currently have a stable public realtime vehicle feed, so departures are shown from the official schedule.',
+              style: const TextStyle(
+                fontSize: 11.5,
+                height: 1.35,
+                color: AppTheme.slate,
+              ),
             ),
           ],
         ),
@@ -211,9 +245,14 @@ class _StopDetailScreenState extends State<StopDetailScreen> {
         children: [
           Icon(icon, size: 15, color: color),
           const SizedBox(width: 6),
-          Text(label,
-              style: TextStyle(
-                  color: color, fontSize: 12.5, fontWeight: FontWeight.w600)),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );
@@ -248,14 +287,17 @@ class _StopDetailScreenState extends State<StopDetailScreen> {
                 point: centre,
                 width: 40,
                 height: 40,
-                child: const Icon(Icons.location_on,
-                    color: AppTheme.hibiscus, size: 36),
+                child: const Icon(
+                  Icons.location_on,
+                  color: AppTheme.hibiscus,
+                  size: 36,
+                ),
               ),
-              for (final v in _vehicles.take(60))
+              for (final v in _vehicles.take(80))
                 Marker(
                   point: LatLng(v.lat, v.lon),
-                  width: 16,
-                  height: 16,
+                  width: 18,
+                  height: 18,
                   child: Container(
                     decoration: BoxDecoration(
                       color: AppTheme.signalTeal,
@@ -292,6 +334,8 @@ class _DepartureTile extends StatelessWidget {
       Reliability.scheduled => (AppTheme.slate, 'Scheduled'),
     };
 
+    final routeDetails = departure.routeLongName.trim();
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -299,18 +343,20 @@ class _DepartureTile extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              constraints: const BoxConstraints(minWidth: 56),
+              constraints: const BoxConstraints(minWidth: 56, maxWidth: 96),
               decoration: BoxDecoration(
                 color: AppTheme.trackNavy,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
                 departure.routeLabel,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
-                  fontSize: 14,
+                  fontSize: 12.5,
                 ),
               ),
             ),
@@ -324,8 +370,24 @@ class _DepartureTile extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w600),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
+                  if (routeDetails.isNotEmpty &&
+                      routeDetails.toLowerCase() !=
+                          departure.headsign.toLowerCase()) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      routeDetails,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        color: AppTheme.slate,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 3),
                   Row(
                     children: [
@@ -338,9 +400,13 @@ class _DepartureTile extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 6),
-                      Text(
-                        '$statusLabel · dep ${formatSecondsOfDay(departure.scheduledSeconds)}',
-                        style: TextStyle(fontSize: 12.5, color: statusColor),
+                      Expanded(
+                        child: Text(
+                          '$statusLabel · ${formatDepartureTime(departure.scheduledAt)}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 12.5, color: statusColor),
+                        ),
                       ),
                     ],
                   ),
@@ -348,21 +414,13 @@ class _DepartureTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  formatCountdown(departure.secondsUntil),
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    color: AppTheme.trackNavy,
-                  ),
-                ),
-                if (departure.hasLive)
-                  const Text('live',
-                      style: TextStyle(fontSize: 11, color: AppTheme.signalTeal)),
-              ],
+            Text(
+              formatCountdown(departure.secondsUntil),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: AppTheme.trackNavy,
+              ),
             ),
           ],
         ),

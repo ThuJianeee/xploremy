@@ -39,12 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final repo = context.read<TransitRepository>();
     final location = await LocationService.current();
 
-    // Nothing cached yet? Fall back to the bundled demo feed so the screen is
-    // never empty on first run.
     final synced = await repo.syncedOperatorIds();
-    if (synced.isEmpty) {
-      await repo.loadMockFeed();
-    }
 
     final stops = await repo.getNearbyStops(
       lat: location.lat,
@@ -59,7 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _stops = stops;
       _notice = location.message ??
           (synced.isEmpty
-              ? 'Showing demo data. Open “Offline data” to download the live feeds.'
+              ? 'No official timetable is cached yet. Open “Offline data” and download the operators you need.'
               : null);
       _loading = false;
     });
