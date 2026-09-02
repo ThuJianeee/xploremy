@@ -31,3 +31,4 @@ ios/Flutter/flutter_export_environment.sh
 # OS files
 .DS_Store
 Thumbs.db
+.flutter-plugins-dependencies
