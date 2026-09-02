@@ -1,17 +1,12 @@
 import 'dart:async';
 
 import '../core/config.dart';
-import '../core/geo.dart';
 import 'gtfs_api.dart';
 import 'local_store.dart';
-import 'mock_feed.dart';
 import 'models.dart';
 
-/// MODULE 1 (public surface) — the single façade the UI talks to.
-///
-/// `getNearbyStops()` and `getDeparturesForStop()` are the two functions the
-/// rest of the team codes against; they read from the SQLite cache, so they
-/// keep working offline once a feed has been synced at least once.
+/// Single façade used by the UI for static schedules, offline cache and
+/// GTFS-realtime vehicle positions.
 class TransitRepository {
   TransitRepository({GtfsApi? api, LocalGtfsStore? store})
       : _api = api ?? GtfsApi(),
@@ -25,13 +20,10 @@ class TransitRepository {
 
   LocalGtfsStore get store => _store;
 
-  // ------------------------------------------------------------------ sync
-
   Future<DateTime?> lastSync(String operatorId) => _store.lastSync(operatorId);
 
   Future<List<String>> syncedOperatorIds() => _store.cachedOperatorIds();
 
-  /// Downloads + caches one operator's static feed.
   Future<SyncResult> syncOperator(Operator op, {bool force = false}) async {
     final last = await _store.lastSync(op.id);
     if (!force &&
@@ -39,6 +31,7 @@ class TransitRepository {
         DateTime.now().difference(last) < AppConfig.staticFeedTtl) {
       return SyncResult(operator: op, skipped: true, stops: 0);
     }
+
     final feed = await _api.fetchStaticFeed(op);
     if (feed.isEmpty) {
       throw GtfsException('${op.shortName} returned an empty feed.');
@@ -47,8 +40,6 @@ class TransitRepository {
     return SyncResult(operator: op, skipped: false, stops: feed.stops.length);
   }
 
-  /// Syncs several operators, collecting per-operator failures instead of
-  /// aborting the whole run (BAS.MY feeds are occasionally unavailable).
   Future<List<SyncResult>> syncAll(
     List<Operator> operators, {
     bool force = false,
@@ -60,25 +51,16 @@ class TransitRepository {
       try {
         results.add(await syncOperator(op, force: force));
       } catch (e) {
-        results.add(SyncResult(operator: op, skipped: false, stops: 0, error: '$e'));
+        results.add(
+          SyncResult(operator: op, skipped: false, stops: 0, error: '$e'),
+        );
       }
     }
     return results;
   }
 
-  /// Loads a small built-in demo feed so the UI is usable with no network
-  /// (also what the team built against before the live feeds were wired up).
-  Future<void> loadMockFeed() async {
-    for (final feed in buildMockFeeds()) {
-      await _store.saveFeed(feed);
-    }
-  }
-
   Future<void> clearCache() => _store.clear();
 
-  // --------------------------------------------------------------- queries
-
-  /// MODULE 2 — stops around a coordinate, nearest first.
   Future<List<GtfsStop>> getNearbyStops({
     required double lat,
     required double lon,
@@ -101,115 +83,123 @@ class TransitRepository {
   Future<GtfsStop?> getStop(String operatorId, String stopId) =>
       _store.stopById(operatorId, stopId);
 
-  /// MODULE 3 — upcoming departures, enriched with the live reliability layer.
+  /// Correct upcoming departures using calendar.txt, calendar_dates.txt and
+  /// frequencies.txt. GTFS times >= 24:00 are converted to their actual local
+  /// DateTime so next-day service is displayed honestly.
   Future<List<Departure>> getDeparturesForStop({
     required String operatorId,
     required String stopId,
     int limit = 12,
   }) async {
-    final now = nowSecondsOfDay();
-    var rows = await _store.rawDepartures(
-      operatorId: operatorId,
-      stopId: stopId,
-      fromSeconds: now,
-      limit: limit,
-    );
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final nowSeconds = now.hour * 3600 + now.minute * 60 + now.second;
 
-    // Late at night wrap around to the start of the service day.
-    if (rows.isEmpty) {
-      rows = await _store.rawDepartures(
+    final collected = <_ServiceDeparture>[];
+
+    Future<void> collectFor(
+      DateTime serviceDate,
+      int fromSeconds, {
+      int queryLimit = 36,
+    }) async {
+      final rows = await _store.rawDepartures(
         operatorId: operatorId,
         stopId: stopId,
-        fromSeconds: 0,
-        limit: limit,
+        serviceDate: serviceDate,
+        fromSeconds: fromSeconds,
+        limit: queryLimit,
+      );
+      for (final row in rows) {
+        final scheduled = (row['departure_seconds'] as num).toInt();
+        final scheduledAt = serviceDate.add(Duration(seconds: scheduled));
+        if (scheduledAt.isBefore(now)) continue;
+        collected.add(_ServiceDeparture(row: row, scheduledAt: scheduledAt));
+      }
+    }
+
+    // Catch trips belonging to yesterday's service day that use 24:xx/25:xx.
+    await collectFor(
+      today.subtract(const Duration(days: 1)),
+      nowSeconds + 86400,
+      queryLimit: limit * 2,
+    );
+    await collectFor(today, nowSeconds, queryLimit: limit * 3);
+
+    // Only when today's service is finished, show the next service day. The UI
+    // labels it as Tomorrow instead of silently wrapping 06:00 by +24 hours.
+    if (collected.isEmpty) {
+      await collectFor(
+        today.add(const Duration(days: 1)),
+        0,
+        queryLimit: limit,
       );
     }
 
-    final vehicles = await _vehiclePositions(operatorId);
-    final byTrip = {
-      for (final v in vehicles)
-        if (v.tripId != null) v.tripId!: v,
-    };
-
-    final stop = await _store.stopById(operatorId, stopId);
+    collected.sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
 
     final departures = <Departure>[];
-    for (final row in rows) {
-      final scheduled = (row['departure_seconds'] as num).toInt();
-      var untilSeconds = scheduled - now;
-      if (untilSeconds < 0) untilSeconds += 86400;
+    final seen = <String>{};
+    for (final item in collected) {
+      final row = item.row;
+      final routeId = (row['route_id'] as String?) ?? '';
+      final rawHeadsign = (row['headsign'] as String?) ?? '';
+      final key = '$routeId|$rawHeadsign|${item.scheduledAt.millisecondsSinceEpoch}';
+      if (!seen.add(key)) continue;
 
-      final tripId = row['trip_id'] as String;
-      int? delay;
-      final vehicle = byTrip[tripId];
-      if (vehicle != null && stop != null) {
-        delay = await _estimateDelaySeconds(
+      final shortName = (row['short_name'] as String?) ?? '';
+      final longName = (row['long_name'] as String?) ?? '';
+      final secondsUntil = item.scheduledAt.difference(now).inSeconds;
+
+      departures.add(
+        Departure(
           operatorId: operatorId,
-          tripId: tripId,
-          vehicle: vehicle,
-          scheduledSeconds: scheduled,
-          nowSeconds: now,
-        );
-      }
-
-      departures.add(Departure(
-        operatorId: operatorId,
-        tripId: tripId,
-        routeLabel: ((row['short_name'] as String?)?.isNotEmpty ?? false)
-            ? row['short_name'] as String
-            : (row['route_id'] as String? ?? '—'),
-        routeLongName: (row['long_name'] as String?) ?? '',
-        headsign: ((row['headsign'] as String?)?.isNotEmpty ?? false)
-            ? row['headsign'] as String
-            : (row['long_name'] as String? ?? 'Destination'),
-        scheduledSeconds: scheduled,
-        secondsUntil: untilSeconds,
-        routeType: (row['type'] as num?)?.toInt() ?? 3,
-        liveDelaySeconds: delay,
-      ));
+          tripId: row['trip_id'] as String,
+          routeLabel: _friendlyRouteLabel(shortName, routeId),
+          routeLongName: longName,
+          headsign: _friendlyHeadsign(rawHeadsign, longName),
+          scheduledSeconds: (row['departure_seconds'] as num).toInt(),
+          scheduledAt: item.scheduledAt,
+          secondsUntil: secondsUntil < 0 ? 0 : secondsUntil,
+          routeType: (row['type'] as num?)?.toInt() ?? 3,
+          // The official API currently publishes vehicle positions only, not
+          // GTFS-RT TripUpdates. We therefore do not fabricate a live ETA.
+          liveDelaySeconds: null,
+        ),
+      );
+      if (departures.length >= limit) break;
     }
     return departures;
   }
 
-  /// Reliability layer: where *should* the vehicle be right now versus where
-  /// its GPS says it is. We find the scheduled stop closest to the live
-  /// position and compare that stop's scheduled time against the clock.
-  Future<int?> _estimateDelaySeconds({
-    required String operatorId,
-    required String tripId,
-    required VehiclePosition vehicle,
-    required int scheduledSeconds,
-    required int nowSeconds,
-  }) async {
-    final shape = await _store.tripShape(operatorId, tripId);
-    if (shape.isEmpty) return null;
-
-    GtfsStop? closest;
-    var best = double.infinity;
-    for (final s in shape) {
-      final d = haversineMetres(vehicle.lat, vehicle.lon, s.lat, s.lon);
-      if (d < best) {
-        best = d;
-        closest = s;
-      }
-    }
-    if (closest == null || best > 2500) return null;
-
-    final rows = await _store.rawDepartures(
-      operatorId: operatorId,
-      stopId: closest.stopId,
-      fromSeconds: 0,
-      limit: 400,
-    );
-    final match = rows.where((r) => r['trip_id'] == tripId).toList();
-    if (match.isEmpty) return null;
-
-    final scheduledAtClosest =
-        (match.first['departure_seconds'] as num).toInt();
-    return nowSeconds - scheduledAtClosest;
+  String _friendlyRouteLabel(String shortName, String routeId) {
+    final label = shortName.trim().isNotEmpty ? shortName.trim() : routeId.trim();
+    return switch (label.toUpperCase()) {
+      'MRL' => 'Monorail',
+      'KJL' => 'Kelana Jaya',
+      'AGL' => 'Ampang',
+      'SPL' => 'Sri Petaling',
+      'KGL' => 'Kajang',
+      'PYL' => 'Putrajaya',
+      _ => label.isEmpty ? '—' : label,
+    };
   }
 
-  /// Live vehicles for an operator, cached for 20 seconds.
+  String _friendlyHeadsign(String headsign, String longName) {
+    final value = headsign.trim();
+    if (value.isEmpty) {
+      return longName.trim().isEmpty ? 'Destination' : longName.trim();
+    }
+
+    final lower = value.toLowerCase();
+    final toIndex = lower.lastIndexOf(' to ');
+    if (lower.startsWith('from ') && toIndex > 5 && toIndex + 4 < value.length) {
+      return 'Towards ${value.substring(toIndex + 4).trim()}';
+    }
+    return value;
+  }
+
+  /// Live vehicles are cached for 20 seconds. data.gov.my states that vehicle
+  /// position feeds refresh every 30 seconds.
   Future<List<VehiclePosition>> _vehiclePositions(String operatorId) async {
     final op = Operators.byId(operatorId);
     if (!op.hasRealtime) return const [];
@@ -225,7 +215,12 @@ class TransitRepository {
       _vehicleFetchedAt[operatorId] = DateTime.now();
       return vehicles;
     } catch (_) {
-      return _vehicleCache[operatorId] ?? const [];
+      final cachedAt = _vehicleFetchedAt[operatorId];
+      if (cachedAt != null &&
+          DateTime.now().difference(cachedAt) < const Duration(minutes: 2)) {
+        return _vehicleCache[operatorId] ?? const [];
+      }
+      return const [];
     }
   }
 
@@ -235,8 +230,8 @@ class TransitRepository {
   Future<List<GtfsStop>> tripShape(String operatorId, String tripId) =>
       _store.tripShape(operatorId, tripId);
 
-  /// "Usually crowded" heuristic: departures in the current hour compared to
-  /// the busiest hour of the day at this stop.
+  /// Kept for compatibility with the existing UI. This is a schedule-density
+  /// heuristic, not measured passenger crowding.
   Future<CrowdLevel> crowdLevel(String operatorId, String stopId) async {
     final density = await _store.hourlyDensity(operatorId, stopId);
     if (density.isEmpty) return CrowdLevel.quiet;
@@ -249,11 +244,17 @@ class TransitRepository {
     return CrowdLevel.quiet;
   }
 
-  /// Very simple multi-modal hint: which operators serve stops near a point.
   Future<List<String>> operatorsNear(double lat, double lon) async {
     final stops = await getNearbyStops(lat: lat, lon: lon, radiusMetres: 2000);
     return stops.map((s) => s.operatorId).toSet().toList();
   }
+}
+
+class _ServiceDeparture {
+  const _ServiceDeparture({required this.row, required this.scheduledAt});
+
+  final Map<String, Object?> row;
+  final DateTime scheduledAt;
 }
 
 class SyncResult {

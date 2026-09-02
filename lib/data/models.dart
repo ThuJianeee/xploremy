@@ -15,8 +15,6 @@ class GtfsStop {
   final String name;
   final double lat;
   final double lon;
-
-  /// Populated by nearby-stop queries.
   final double? distanceMetres;
 
   GtfsStop copyWithDistance(double metres) => GtfsStop(
@@ -62,8 +60,6 @@ class GtfsRoute {
   final String routeId;
   final String shortName;
   final String longName;
-
-  /// GTFS route_type: 0 tram, 1 metro, 2 rail, 3 bus…
   final int type;
   final String? colorHex;
 
@@ -136,6 +132,106 @@ class GtfsStopTime {
       };
 }
 
+/// One row from GTFS calendar.txt.
+class GtfsCalendarService {
+  const GtfsCalendarService({
+    required this.operatorId,
+    required this.serviceId,
+    required this.monday,
+    required this.tuesday,
+    required this.wednesday,
+    required this.thursday,
+    required this.friday,
+    required this.saturday,
+    required this.sunday,
+    required this.startDate,
+    required this.endDate,
+  });
+
+  final String operatorId;
+  final String serviceId;
+  final bool monday;
+  final bool tuesday;
+  final bool wednesday;
+  final bool thursday;
+  final bool friday;
+  final bool saturday;
+  final bool sunday;
+
+  /// YYYYMMDD integer.
+  final int startDate;
+  final int endDate;
+
+  Map<String, Object?> toMap() => {
+        'operator_id': operatorId,
+        'service_id': serviceId,
+        'monday': monday ? 1 : 0,
+        'tuesday': tuesday ? 1 : 0,
+        'wednesday': wednesday ? 1 : 0,
+        'thursday': thursday ? 1 : 0,
+        'friday': friday ? 1 : 0,
+        'saturday': saturday ? 1 : 0,
+        'sunday': sunday ? 1 : 0,
+        'start_date': startDate,
+        'end_date': endDate,
+      };
+}
+
+/// One row from GTFS calendar_dates.txt.
+class GtfsCalendarDate {
+  const GtfsCalendarDate({
+    required this.operatorId,
+    required this.serviceId,
+    required this.date,
+    required this.exceptionType,
+  });
+
+  final String operatorId;
+  final String serviceId;
+
+  /// YYYYMMDD integer.
+  final int date;
+
+  /// 1 = added service, 2 = removed service.
+  final int exceptionType;
+
+  Map<String, Object?> toMap() => {
+        'operator_id': operatorId,
+        'service_id': serviceId,
+        'date': date,
+        'exception_type': exceptionType,
+      };
+}
+
+/// A GTFS frequency window. The trip in stop_times.txt is a template and is
+/// repeated between startSeconds and endSeconds every headwaySeconds.
+class GtfsFrequency {
+  const GtfsFrequency({
+    required this.operatorId,
+    required this.tripId,
+    required this.startSeconds,
+    required this.endSeconds,
+    required this.headwaySeconds,
+    this.exactTimes = false,
+  });
+
+  final String operatorId;
+  final String tripId;
+  final int startSeconds;
+  final int endSeconds;
+  final int headwaySeconds;
+  final bool exactTimes;
+
+  Map<String, Object?> toMap() => {
+        'operator_id': operatorId,
+        'trip_id': tripId,
+        'start_seconds': startSeconds,
+        'end_seconds': endSeconds,
+        'headway_seconds': headwaySeconds,
+        'exact_times': exactTimes ? 1 : 0,
+      };
+}
+
 /// A single upcoming departure shown on the Stop Detail screen.
 class Departure {
   const Departure({
@@ -145,6 +241,7 @@ class Departure {
     required this.routeLongName,
     required this.headsign,
     required this.scheduledSeconds,
+    required this.scheduledAt,
     required this.secondsUntil,
     required this.routeType,
     this.liveDelaySeconds,
@@ -156,15 +253,20 @@ class Departure {
   final String routeLongName;
   final String headsign;
   final int scheduledSeconds;
+
+  /// Real local date/time after applying the GTFS service day. This avoids the
+  /// old bug where 06:00 was silently treated as "15 hours from now".
+  final DateTime scheduledAt;
   final int secondsUntil;
   final int routeType;
 
-  /// Positive = running late, negative = early. Null = no live data.
+  /// Positive = running late, negative = early. Null = scheduled data only.
+  /// data.gov.my currently publishes vehicle positions, not GTFS-RT trip
+  /// updates, so this is only populated when a vehicle can be matched safely.
   final int? liveDelaySeconds;
 
   bool get hasLive => liveDelaySeconds != null;
 
-  /// Reliability layer: how this vehicle is tracking against schedule.
   Reliability get reliability {
     final d = liveDelaySeconds;
     if (d == null) return Reliability.scheduled;
@@ -199,7 +301,6 @@ class VehiclePosition {
   final DateTime? timestamp;
 }
 
-/// Crowding heuristic derived from how many trips serve a stop in an hour.
 enum CrowdLevel { quiet, moderate, busy }
 
 extension CrowdLevelLabel on CrowdLevel {

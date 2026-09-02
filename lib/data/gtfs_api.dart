@@ -11,16 +11,12 @@ import '../core/config.dart';
 import '../core/geo.dart';
 import 'models.dart';
 
-/// MODULE 1 — Data & API layer.
-///
-/// Fetches GTFS-static ZIP archives and GTFS-realtime protobuf feeds from
-/// MAMPU's DTSA open data platform (api.data.gov.my). No API key required.
+/// Data/API layer for Malaysia's official data.gov.my GTFS endpoints.
 class GtfsApi {
   GtfsApi({http.Client? client}) : _client = client ?? http.Client();
 
   final http.Client _client;
 
-  /// Downloads and unzips a GTFS-static feed, returning the parsed entities.
   Future<GtfsStaticFeed> fetchStaticFeed(Operator op) async {
     final response = await _client.get(op.staticUrl);
     if (response.statusCode != 200) {
@@ -32,8 +28,9 @@ class GtfsApi {
     return parseStaticArchive(op, response.bodyBytes);
   }
 
-  /// Parses an in-memory GTFS ZIP into Dart models.
-  /// Exposed separately so it can be unit-tested with a fixture file.
+  /// Parses the files needed for correct service-day and frequency-aware
+  /// departures. Rapid Rail relies heavily on frequencies.txt, so ignoring it
+  /// produces the old 06:00/06:26-only timetable bug.
   GtfsStaticFeed parseStaticArchive(Operator op, Uint8List bytes) {
     final archive = ZipDecoder().decodeBytes(bytes);
 
@@ -56,11 +53,15 @@ class GtfsApi {
       routes: _parseRoutes(op, read('routes.txt')),
       trips: _parseTrips(op, read('trips.txt')),
       stopTimes: _parseStopTimes(op, read('stop_times.txt')),
+      calendar: _parseCalendar(op, read('calendar.txt')),
+      calendarDates: _parseCalendarDates(op, read('calendar_dates.txt')),
+      frequencies: _parseFrequencies(op, read('frequencies.txt')),
       fetchedAt: DateTime.now(),
     );
   }
 
-  /// Live vehicle positions (GTFS-realtime protobuf).
+  /// data.gov.my currently exposes GTFS-RT vehicle positions. The official
+  /// feed is refreshed every ~30 seconds for supported operators.
   Future<List<VehiclePosition>> fetchVehiclePositions(Operator op) async {
     final url = op.realtimeUrl;
     if (url == null) return const [];
@@ -89,18 +90,16 @@ class GtfsApi {
           lon: v.position.longitude.toDouble(),
           tripId: v.hasTrip() && v.trip.hasTripId() ? v.trip.tripId : null,
           routeId: v.hasTrip() && v.trip.hasRouteId() ? v.trip.routeId : null,
-          bearing: v.position.hasBearing() ? v.position.bearing.toDouble() : null,
+          bearing:
+              v.position.hasBearing() ? v.position.bearing.toDouble() : null,
           timestamp: v.hasTimestamp()
-              ? DateTime.fromMillisecondsSinceEpoch(
-                  v.timestamp.toInt() * 1000)
+              ? DateTime.fromMillisecondsSinceEpoch(v.timestamp.toInt() * 1000)
               : null,
         ),
       );
     }
     return result;
   }
-
-  // ---------------------------------------------------------------- parsing
 
   Map<String, int> _header(List<dynamic> row) {
     final map = <String, int>{};
@@ -114,6 +113,12 @@ class GtfsApi {
     final index = h[key];
     if (index == null || index >= row.length) return '';
     return row[index].toString().trim();
+  }
+
+  int? _dateKey(String value) {
+    final compact = value.replaceAll('-', '').trim();
+    if (compact.length != 8) return null;
+    return int.tryParse(compact);
   }
 
   List<GtfsStop> _parseStops(Operator op, List<List<dynamic>> rows) {
@@ -196,6 +201,92 @@ class GtfsApi {
     }
     return out;
   }
+
+  List<GtfsCalendarService> _parseCalendar(
+    Operator op,
+    List<List<dynamic>> rows,
+  ) {
+    if (rows.length < 2) return const [];
+    final h = _header(rows.first);
+    final out = <GtfsCalendarService>[];
+    for (final row in rows.skip(1)) {
+      final serviceId = _cell(row, h, 'service_id');
+      final startDate = _dateKey(_cell(row, h, 'start_date'));
+      final endDate = _dateKey(_cell(row, h, 'end_date'));
+      if (serviceId.isEmpty || startDate == null || endDate == null) continue;
+      bool active(String key) => _cell(row, h, key) == '1';
+      out.add(GtfsCalendarService(
+        operatorId: op.id,
+        serviceId: serviceId,
+        monday: active('monday'),
+        tuesday: active('tuesday'),
+        wednesday: active('wednesday'),
+        thursday: active('thursday'),
+        friday: active('friday'),
+        saturday: active('saturday'),
+        sunday: active('sunday'),
+        startDate: startDate,
+        endDate: endDate,
+      ));
+    }
+    return out;
+  }
+
+  List<GtfsCalendarDate> _parseCalendarDates(
+    Operator op,
+    List<List<dynamic>> rows,
+  ) {
+    if (rows.length < 2) return const [];
+    final h = _header(rows.first);
+    final out = <GtfsCalendarDate>[];
+    for (final row in rows.skip(1)) {
+      final serviceId = _cell(row, h, 'service_id');
+      final date = _dateKey(_cell(row, h, 'date'));
+      final type = int.tryParse(_cell(row, h, 'exception_type'));
+      if (serviceId.isEmpty || date == null || (type != 1 && type != 2)) {
+        continue;
+      }
+      out.add(GtfsCalendarDate(
+        operatorId: op.id,
+        serviceId: serviceId,
+        date: date,
+        exceptionType: type!,
+      ));
+    }
+    return out;
+  }
+
+  List<GtfsFrequency> _parseFrequencies(
+    Operator op,
+    List<List<dynamic>> rows,
+  ) {
+    if (rows.length < 2) return const [];
+    final h = _header(rows.first);
+    final out = <GtfsFrequency>[];
+    for (final row in rows.skip(1)) {
+      final tripId = _cell(row, h, 'trip_id');
+      final start = parseGtfsTime(_cell(row, h, 'start_time'));
+      final end = parseGtfsTime(_cell(row, h, 'end_time'));
+      final headway = int.tryParse(_cell(row, h, 'headway_secs'));
+      if (tripId.isEmpty ||
+          start == null ||
+          end == null ||
+          headway == null ||
+          headway <= 0 ||
+          end <= start) {
+        continue;
+      }
+      out.add(GtfsFrequency(
+        operatorId: op.id,
+        tripId: tripId,
+        startSeconds: start,
+        endSeconds: end,
+        headwaySeconds: headway,
+        exactTimes: _cell(row, h, 'exact_times') == '1',
+      ));
+    }
+    return out;
+  }
 }
 
 class GtfsStaticFeed {
@@ -205,6 +296,9 @@ class GtfsStaticFeed {
     required this.routes,
     required this.trips,
     required this.stopTimes,
+    required this.calendar,
+    required this.calendarDates,
+    required this.frequencies,
     required this.fetchedAt,
   });
 
@@ -213,6 +307,9 @@ class GtfsStaticFeed {
   final List<GtfsRoute> routes;
   final List<GtfsTrip> trips;
   final List<GtfsStopTime> stopTimes;
+  final List<GtfsCalendarService> calendar;
+  final List<GtfsCalendarDate> calendarDates;
+  final List<GtfsFrequency> frequencies;
   final DateTime fetchedAt;
 
   bool get isEmpty => stops.isEmpty;
@@ -221,6 +318,7 @@ class GtfsStaticFeed {
 class GtfsException implements Exception {
   GtfsException(this.message);
   final String message;
+
   @override
   String toString() => message;
 }

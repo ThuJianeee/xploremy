@@ -97,9 +97,9 @@ class _DataScreenState extends State<DataScreen> {
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'Timetables come from MAMPU\u2019s DTSA platform '
-                    '(api.data.gov.my) as GTFS feeds. Cache them once and '
-                    'browse schedules with no connection.',
+                    'Timetables come from Malaysia\u2019s official data.gov.my GTFS API. '
+                    'Static schedules are cached for offline use; supported operators '
+                    'also expose live vehicle positions.',
                     style: TextStyle(color: AppTheme.slate, fontSize: 13, height: 1.4),
                   ),
                   if (_message != null) ...[
@@ -130,9 +130,9 @@ class _DataScreenState extends State<DataScreen> {
                       style: const TextStyle(fontWeight: FontWeight.w600)),
                   subtitle: Text(
                     _lastSync[op.id] == null
-                        ? 'Not downloaded${op.hasRealtime ? " · live tracking available" : ""}'
+                        ? 'Not downloaded${op.hasRealtime ? " · live vehicle positions available" : " · schedule only"}'
                         : 'Updated ${formatter.format(_lastSync[op.id]!)}'
-                            '${op.hasRealtime ? " · live" : ""}',
+                            '${op.hasRealtime ? " · live vehicle positions" : " · schedule only"}',
                     style: const TextStyle(fontSize: 12.5),
                   ),
                   trailing: _busyOperator == op.id

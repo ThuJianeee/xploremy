@@ -20,14 +20,16 @@ String formatDistance(double metres) {
   return '${(metres / 1000).toStringAsFixed(1)} km';
 }
 
-/// "HH:MM:SS" (GTFS allows hours >= 24) -> seconds after midnight.
+/// "HH:MM:SS" (GTFS allows hours >= 24) -> seconds after service-day midnight.
 int? parseGtfsTime(String value) {
   final parts = value.trim().split(':');
   if (parts.length != 3) return null;
   final h = int.tryParse(parts[0]);
   final m = int.tryParse(parts[1]);
   final s = int.tryParse(parts[2]);
-  if (h == null || m == null || s == null) return null;
+  if (h == null || m == null || s == null || m > 59 || s > 59 || h < 0) {
+    return null;
+  }
   return h * 3600 + m * 60 + s;
 }
 
@@ -50,4 +52,21 @@ String formatCountdown(int seconds) {
   final h = minutes ~/ 60;
   final m = minutes % 60;
   return m == 0 ? '${h}h' : '${h}h ${m}m';
+}
+
+String formatClockTime(DateTime time) =>
+    '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+
+/// Clearly labels next-day departures instead of silently wrapping a past
+/// schedule by +24 hours.
+String formatDepartureTime(DateTime scheduledAt, {DateTime? now}) {
+  final reference = now ?? DateTime.now();
+  final today = DateTime(reference.year, reference.month, reference.day);
+  final day = DateTime(scheduledAt.year, scheduledAt.month, scheduledAt.day);
+  final difference = day.difference(today).inDays;
+  final clock = formatClockTime(scheduledAt);
+  if (difference == 0) return clock;
+  if (difference == 1) return 'Tomorrow $clock';
+  if (difference == -1) return 'Yesterday $clock';
+  return '${scheduledAt.day}/${scheduledAt.month} $clock';
 }
