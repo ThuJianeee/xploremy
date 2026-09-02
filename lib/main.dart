@@ -49,3 +49,6 @@ class _AuthGate extends StatelessWidget {
     return auth.isSignedIn ? const AppShell() : const LoginScreen();
   }
 }
+
+
+
