@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
 
-import '../home/home_screen.dart';
-import '../profile/profile_screen.dart';
 import '../data_sync/data_screen.dart';
+import '../home/home_screen.dart';
+import '../planner/route_planner_screen.dart';
+import '../profile/profile_screen.dart';
 
 class AppShell extends StatefulWidget {
-  const AppShell({super.key});
+  const AppShell({
+    super.key,
+  });
 
   @override
-  State<AppShell> createState() => _AppShellState();
+  State<AppShell> createState() {
+    return _AppShellState();
+  }
 }
 
 class _AppShellState extends State<AppShell> {
@@ -16,31 +21,62 @@ class _AppShellState extends State<AppShell> {
 
   static const _pages = <Widget>[
     HomeScreen(),
+    RoutePlannerScreen(),
     DataScreen(),
     ProfileScreen(),
   ];
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Scaffold(
-      body: IndexedStack(index: _index, children: _pages),
+      body: IndexedStack(
+        index: _index,
+        children: _pages,
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
+        onDestinationSelected: (index) {
+          setState(() {
+            _index = index;
+          });
+        },
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.near_me_outlined),
-            selectedIcon: Icon(Icons.near_me),
+            icon: Icon(
+              Icons.near_me_outlined,
+            ),
+            selectedIcon: Icon(
+              Icons.near_me,
+            ),
             label: 'Nearby',
           ),
           NavigationDestination(
-            icon: Icon(Icons.cloud_download_outlined),
-            selectedIcon: Icon(Icons.cloud_download),
-            label: 'Offline data',
+            icon: Icon(
+              Icons.route_outlined,
+            ),
+            selectedIcon: Icon(
+              Icons.route,
+            ),
+            label: 'Planner',
           ),
           NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
+            icon: Icon(
+              Icons.cloud_download_outlined,
+            ),
+            selectedIcon: Icon(
+              Icons.cloud_download,
+            ),
+            label: 'Offline',
+          ),
+          NavigationDestination(
+            icon: Icon(
+              Icons.person_outline,
+            ),
+            selectedIcon: Icon(
+              Icons.person,
+            ),
             label: 'Profile',
           ),
         ],
