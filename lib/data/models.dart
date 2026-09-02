@@ -1,6 +1,4 @@
-/// Dart models mirroring the GTFS-static text files we parse
-/// (stops.txt, routes.txt, trips.txt, stop_times.txt) plus the
-/// GTFS-realtime vehicle positions.
+// XploreMY data models.
 
 class GtfsStop {
   const GtfsStop({
