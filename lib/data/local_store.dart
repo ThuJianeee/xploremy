@@ -7,25 +7,42 @@ import 'models.dart';
 
 /// Offline GTFS cache.
 ///
-/// Version 2 adds calendar/calendar_dates/frequencies so departures are
-/// service-day aware and Rapid Rail frequency feeds are expanded correctly.
+/// Version 2 adds:
+/// - calendar.txt
+/// - calendar_dates.txt
+/// - frequencies.txt
+///
+/// This allows the app to determine the correct service day and calculate
+/// real scheduled departures instead of treating all timetable rows as daily.
 class LocalGtfsStore {
   Database? _db;
 
-  Future<Database> get database async => _db ??= await _open();
+  Future<Database> get database async {
+    return _db ??= await _open();
+  }
 
   Future<Database> _open() async {
     final dir = await getDatabasesPath();
+
     return openDatabase(
-      p.join(dir, 'xploremy_gtfs.db'),
+      p.join(
+        dir,
+        'xploremy_gtfs.db',
+      ),
       version: 2,
-      onCreate: (db, _) async => _createSchema(db),
-      onUpgrade: (db, oldVersion, newVersion) async {
+      onCreate: (db, _) async {
+        await _createSchema(db);
+      },
+      onUpgrade: (
+        db,
+        oldVersion,
+        newVersion,
+      ) async {
         if (oldVersion < 2) {
           await _createV2Tables(db);
 
-          // Existing v1 rows do not contain service calendars/frequencies and
-          // therefore cannot produce trustworthy departures.
+          /// Existing V1 feed rows do not have trustworthy calendar data.
+          /// Force users to re-download the official GTFS feed.
           for (final table in [
             'stops',
             'routes',
@@ -41,11 +58,9 @@ class LocalGtfsStore {
     );
   }
 
-  // ==============================================================
-  // DATABASE SCHEMA
-  // ==============================================================
-
-  Future<void> _createSchema(Database db) async {
+  Future<void> _createSchema(
+    Database db,
+  ) async {
     final batch = db.batch();
 
     batch.execute(
@@ -56,13 +71,22 @@ class LocalGtfsStore {
         name TEXT NOT NULL,
         lat REAL NOT NULL,
         lon REAL NOT NULL,
-        PRIMARY KEY (operator_id, stop_id)
+        PRIMARY KEY (
+          operator_id,
+          stop_id
+        )
       )
       ''',
     );
 
     batch.execute(
-      'CREATE INDEX idx_stops_bbox ON stops(lat, lon)',
+      '''
+      CREATE INDEX idx_stops_bbox
+      ON stops(
+        lat,
+        lon
+      )
+      ''',
     );
 
     batch.execute(
@@ -74,7 +98,10 @@ class LocalGtfsStore {
         long_name TEXT,
         type INTEGER,
         color TEXT,
-        PRIMARY KEY (operator_id, route_id)
+        PRIMARY KEY (
+          operator_id,
+          route_id
+        )
       )
       ''',
     );
@@ -87,7 +114,10 @@ class LocalGtfsStore {
         route_id TEXT NOT NULL,
         service_id TEXT,
         headsign TEXT,
-        PRIMARY KEY (operator_id, trip_id)
+        PRIMARY KEY (
+          operator_id,
+          trip_id
+        )
       )
       ''',
     );
@@ -105,13 +135,25 @@ class LocalGtfsStore {
     );
 
     batch.execute(
-      'CREATE INDEX idx_stop_times_stop '
-          'ON stop_times(operator_id, stop_id, departure_seconds)',
+      '''
+      CREATE INDEX idx_stop_times_stop
+      ON stop_times(
+        operator_id,
+        stop_id,
+        departure_seconds
+      )
+      ''',
     );
 
     batch.execute(
-      'CREATE INDEX idx_stop_times_trip '
-          'ON stop_times(operator_id, trip_id, sequence)',
+      '''
+      CREATE INDEX idx_stop_times_trip
+      ON stop_times(
+        operator_id,
+        trip_id,
+        sequence
+      )
+      ''',
     );
 
     batch.execute(
@@ -131,7 +173,9 @@ class LocalGtfsStore {
     await _createV2Tables(db);
   }
 
-  Future<void> _createV2Tables(Database db) async {
+  Future<void> _createV2Tables(
+    Database db,
+  ) async {
     final batch = db.batch();
 
     batch.execute(
@@ -148,7 +192,10 @@ class LocalGtfsStore {
         sunday INTEGER NOT NULL,
         start_date INTEGER NOT NULL,
         end_date INTEGER NOT NULL,
-        PRIMARY KEY (operator_id, service_id)
+        PRIMARY KEY (
+          operator_id,
+          service_id
+        )
       )
       ''',
     );
@@ -160,14 +207,23 @@ class LocalGtfsStore {
         service_id TEXT NOT NULL,
         date INTEGER NOT NULL,
         exception_type INTEGER NOT NULL,
-        PRIMARY KEY (operator_id, service_id, date)
+        PRIMARY KEY (
+          operator_id,
+          service_id,
+          date
+        )
       )
       ''',
     );
 
     batch.execute(
-      'CREATE INDEX IF NOT EXISTS idx_calendar_dates_date '
-          'ON calendar_dates(operator_id, date)',
+      '''
+      CREATE INDEX IF NOT EXISTS idx_calendar_dates_date
+      ON calendar_dates(
+        operator_id,
+        date
+      )
+      ''',
     );
 
     batch.execute(
@@ -184,8 +240,13 @@ class LocalGtfsStore {
     );
 
     batch.execute(
-      'CREATE INDEX IF NOT EXISTS idx_frequencies_trip '
-          'ON frequencies(operator_id, trip_id)',
+      '''
+      CREATE INDEX IF NOT EXISTS idx_frequencies_trip
+      ON frequencies(
+        operator_id,
+        trip_id
+      )
+      ''',
     );
 
     await batch.commit(
@@ -194,12 +255,12 @@ class LocalGtfsStore {
   }
 
   // ==============================================================
-  // FEED INFORMATION
+  // FEED META
   // ==============================================================
 
   Future<DateTime?> lastSync(
-      String operatorId,
-      ) async {
+    String operatorId,
+  ) async {
     final db = await database;
 
     final rows = await db.query(
@@ -233,21 +294,21 @@ class LocalGtfsStore {
     return rows
         .map(
           (row) => row['operator_id'] as String,
-    )
+        )
         .toList();
   }
 
   // ==============================================================
-  // SAVE GTFS FEED
+  // SAVE FEED
   // ==============================================================
 
   Future<void> saveFeed(
-      GtfsStaticFeed feed,
-      ) async {
+    GtfsStaticFeed feed,
+  ) async {
     final db = await database;
 
     await db.transaction(
-          (txn) async {
+      (txn) async {
         for (final table in [
           'stops',
           'routes',
@@ -267,9 +328,9 @@ class LocalGtfsStore {
         }
 
         Future<void> insertAll(
-            String table,
-            Iterable<Map<String, Object?>> rows,
-            ) async {
+          String table,
+          Iterable<Map<String, Object?>> rows,
+        ) async {
           var batch = txn.batch();
           var count = 0;
 
@@ -299,49 +360,49 @@ class LocalGtfsStore {
         await insertAll(
           'stops',
           feed.stops.map(
-                (item) => item.toMap(),
+            (item) => item.toMap(),
           ),
         );
 
         await insertAll(
           'routes',
           feed.routes.map(
-                (item) => item.toMap(),
+            (item) => item.toMap(),
           ),
         );
 
         await insertAll(
           'trips',
           feed.trips.map(
-                (item) => item.toMap(),
+            (item) => item.toMap(),
           ),
         );
 
         await insertAll(
           'stop_times',
           feed.stopTimes.map(
-                (item) => item.toMap(),
+            (item) => item.toMap(),
           ),
         );
 
         await insertAll(
           'calendar_services',
           feed.calendar.map(
-                (item) => item.toMap(),
+            (item) => item.toMap(),
           ),
         );
 
         await insertAll(
           'calendar_dates',
           feed.calendarDates.map(
-                (item) => item.toMap(),
+            (item) => item.toMap(),
           ),
         );
 
         await insertAll(
           'frequencies',
           feed.frequencies.map(
-                (item) => item.toMap(),
+            (item) => item.toMap(),
           ),
         );
 
@@ -349,12 +410,10 @@ class LocalGtfsStore {
           'feed_meta',
           {
             'operator_id': feed.operatorId,
-            'fetched_at':
-            feed.fetchedAt.millisecondsSinceEpoch,
+            'fetched_at': feed.fetchedAt.millisecondsSinceEpoch,
             'stop_count': feed.stops.length,
           },
-          conflictAlgorithm:
-          ConflictAlgorithm.replace,
+          conflictAlgorithm: ConflictAlgorithm.replace,
         );
       },
     );
@@ -373,15 +432,13 @@ class LocalGtfsStore {
   }) async {
     final db = await database;
 
-    final latDelta =
-        radiusMetres / 111320.0;
+    final latDelta = radiusMetres / 111320.0;
 
-    final lonDelta =
-        radiusMetres / 78000.0;
+    final lonDelta = radiusMetres / 78000.0;
 
     final where = StringBuffer(
       'lat BETWEEN ? AND ? '
-          'AND lon BETWEEN ? AND ?',
+      'AND lon BETWEEN ? AND ?',
     );
 
     final args = <Object?>[
@@ -391,16 +448,13 @@ class LocalGtfsStore {
       lon + lonDelta,
     ];
 
-    if (operatorIds != null &&
-        operatorIds.isNotEmpty) {
+    if (operatorIds != null && operatorIds.isNotEmpty) {
       where.write(
         ' AND operator_id IN '
-            '(${List.filled(operatorIds.length, '?').join(',')})',
+        '(${List.filled(operatorIds.length, '?').join(',')})',
       );
 
-      args.addAll(
-        operatorIds,
-      );
+      args.addAll(operatorIds);
     }
 
     final rows = await db.query(
@@ -411,12 +465,9 @@ class LocalGtfsStore {
     );
 
     final stops = rows
+        .map(GtfsStop.fromMap)
         .map(
-      GtfsStop.fromMap,
-    )
-        .map(
-          (stop) =>
-          stop.copyWithDistance(
+          (stop) => stop.copyWithDistance(
             haversineMetres(
               lat,
               lon,
@@ -424,65 +475,58 @@ class LocalGtfsStore {
               stop.lon,
             ),
           ),
-    )
+        )
         .where(
-          (stop) =>
-      stop.distanceMetres! <=
-          radiusMetres,
-    )
+          (stop) => stop.distanceMetres! <= radiusMetres,
+        )
         .toList()
       ..sort(
-            (a, b) =>
-            a.distanceMetres!.compareTo(
-              b.distanceMetres!,
-            ),
+        (a, b) => a.distanceMetres!.compareTo(
+          b.distanceMetres!,
+        ),
       );
 
-    return stops
-        .take(limit)
-        .toList();
+    return stops.take(limit).toList();
   }
 
   // ==============================================================
-  // SEARCH
+  // NORMAL STOP SEARCH
   // ==============================================================
 
   Future<List<GtfsStop>> searchStops(
-      String query, {
-        int limit = 30,
-      }) async {
+    String query, {
+    int limit = 30,
+  }) async {
     final db = await database;
+
+    final clean = query.trim();
+
+    if (clean.isEmpty) {
+      return const [];
+    }
 
     final rows = await db.query(
       'stops',
       where: 'name LIKE ?',
       whereArgs: [
-        '%$query%',
+        '%$clean%',
       ],
+      orderBy: 'name COLLATE NOCASE ASC',
       limit: limit,
     );
 
-    return rows
-        .map(
-      GtfsStop.fromMap,
-    )
-        .toList();
+    return rows.map(GtfsStop.fromMap).toList();
   }
 
-  // ==============================================================
-  // GET STOP
-  // ==============================================================
-
   Future<GtfsStop?> stopById(
-      String operatorId,
-      String stopId,
-      ) async {
+    String operatorId,
+    String stopId,
+  ) async {
     final db = await database;
 
     final rows = await db.query(
       'stops',
-      where:
-      'operator_id = ? AND stop_id = ?',
+      where: 'operator_id = ? AND stop_id = ?',
       whereArgs: [
         operatorId,
         stopId,
@@ -500,60 +544,308 @@ class LocalGtfsStore {
   }
 
   // ==============================================================
+  // ROUTE PLANNER STATION SEARCH
+  // ==============================================================
+
+  String _normalisePlannerStationName(
+    String value,
+  ) {
+    var name = value.trim();
+
+    name = name.replaceAll(
+      RegExp(
+        r'\s*-\s*REDONE\s*$',
+        caseSensitive: false,
+      ),
+      '',
+    );
+
+    name = name.replaceAll(
+      RegExp(r'\s+'),
+      ' ',
+    );
+
+    return name.toUpperCase();
+  }
+
+  String _displayPlannerStationName(
+    String value,
+  ) {
+    var name = value.trim();
+
+    name = name.replaceAll(
+      RegExp(
+        r'\s*-\s*REDONE\s*$',
+        caseSensitive: false,
+      ),
+      '',
+    );
+
+    name = name.replaceAll(
+      RegExp(r'\s+'),
+      ' ',
+    );
+
+    return name.isEmpty ? value : name;
+  }
+
+  Future<List<PlannerStopOption>> searchPlannerStops(
+    String query, {
+    int limit = 40,
+  }) async {
+    final db = await database;
+
+    final clean = query.trim();
+
+    if (clean.length < 2) {
+      return const [];
+    }
+
+    final rows = await db.rawQuery(
+      '''
+      SELECT DISTINCT
+        s.operator_id,
+        s.stop_id,
+        s.name,
+        s.lat,
+        s.lon,
+        r.route_id,
+        r.short_name,
+        r.long_name,
+        r.type
+
+      FROM stops s
+
+      JOIN stop_times st
+        ON st.operator_id = s.operator_id
+        AND st.stop_id = s.stop_id
+
+      JOIN trips t
+        ON t.operator_id = st.operator_id
+        AND t.trip_id = st.trip_id
+
+      JOIN routes r
+        ON r.operator_id = t.operator_id
+        AND r.route_id = t.route_id
+
+      WHERE s.name LIKE ?
+
+      ORDER BY
+        s.name COLLATE NOCASE ASC,
+        r.long_name COLLATE NOCASE ASC,
+        r.short_name COLLATE NOCASE ASC
+
+      LIMIT 500
+      ''',
+      [
+        '%$clean%',
+      ],
+    );
+
+    return _groupPlannerRows(
+      rows,
+      limit: limit,
+    );
+  }
+
+  Future<List<PlannerStopOption>> plannerOptionsForStop({
+    required String operatorId,
+    required String stopId,
+  }) async {
+    final selected = await stopById(
+      operatorId,
+      stopId,
+    );
+
+    if (selected == null) {
+      return const [];
+    }
+
+    final searchName = _displayPlannerStationName(
+      selected.name,
+    );
+
+    final options = await searchPlannerStops(
+      searchName,
+      limit: 80,
+    );
+
+    final exactMatches = options.where(
+      (option) {
+        if (option.operatorId != operatorId) {
+          return false;
+        }
+
+        return option.stops.any(
+          (stop) => stop.stopId == stopId && stop.operatorId == operatorId,
+        );
+      },
+    ).toList();
+
+    if (exactMatches.isNotEmpty) {
+      return exactMatches;
+    }
+
+    final stationKey = _normalisePlannerStationName(
+      selected.name,
+    );
+
+    return options.where(
+      (option) {
+        return option.operatorId == operatorId &&
+            _normalisePlannerStationName(
+                  option.displayName,
+                ) ==
+                stationKey;
+      },
+    ).toList();
+  }
+
+  List<PlannerStopOption> _groupPlannerRows(
+    List<Map<String, Object?>> rows, {
+    required int limit,
+  }) {
+    final grouped = <String, _PlannerGroup>{};
+
+    for (final row in rows) {
+      final operatorId = row['operator_id'] as String;
+
+      final stopId = row['stop_id'] as String;
+
+      final stopName = row['name'] as String;
+
+      final routeId = (row['route_id'] as String?) ?? '';
+
+      if (routeId.isEmpty) {
+        continue;
+      }
+
+      final shortName = (row['short_name'] as String?) ?? '';
+
+      final longName = (row['long_name'] as String?) ?? '';
+
+      final routeType = (row['type'] as num?)?.toInt() ?? 3;
+
+      final stationKey = _normalisePlannerStationName(
+        stopName,
+      );
+
+      final groupKey = '$operatorId|$routeId|$stationKey';
+
+      final stop = GtfsStop(
+        operatorId: operatorId,
+        stopId: stopId,
+        name: stopName,
+        lat: (row['lat'] as num).toDouble(),
+        lon: (row['lon'] as num).toDouble(),
+      );
+
+      final group = grouped.putIfAbsent(
+        groupKey,
+        () => _PlannerGroup(
+          displayName: _displayPlannerStationName(
+            stopName,
+          ),
+          operatorId: operatorId,
+          routeId: routeId,
+          routeShortName: shortName,
+          routeLongName: longName,
+          routeType: routeType,
+        ),
+      );
+
+      final alreadyAdded = group.stops.any(
+        (existing) =>
+            existing.operatorId == stop.operatorId &&
+            existing.stopId == stop.stopId,
+      );
+
+      if (!alreadyAdded) {
+        group.stops.add(stop);
+      }
+    }
+
+    final options = grouped.values
+        .where(
+          (group) => group.stops.isNotEmpty,
+        )
+        .map(
+          (group) => PlannerStopOption(
+            displayName: group.displayName,
+            operatorId: group.operatorId,
+            routeId: group.routeId,
+            routeShortName: group.routeShortName,
+            routeLongName: group.routeLongName,
+            routeType: group.routeType,
+            stops: List.unmodifiable(group.stops),
+          ),
+        )
+        .toList();
+
+    options.sort(
+      (a, b) {
+        final stationCompare = a.displayName.toLowerCase().compareTo(
+              b.displayName.toLowerCase(),
+            );
+
+        if (stationCompare != 0) {
+          return stationCompare;
+        }
+
+        return a.lineName.toLowerCase().compareTo(
+              b.lineName.toLowerCase(),
+            );
+      },
+    );
+
+    return options.take(limit).toList();
+  }
+
+  // ==============================================================
   // SERVICE CALENDAR
   // ==============================================================
 
   int _dateKey(
-      DateTime date,
-      ) {
-    return date.year * 10000 +
-        date.month * 100 +
-        date.day;
+    DateTime date,
+  ) {
+    return date.year * 10000 + date.month * 100 + date.day;
   }
 
   String _weekdayColumn(
-      DateTime date,
-      ) =>
-      switch (date.weekday) {
-        DateTime.monday =>
-        'monday',
-        DateTime.tuesday =>
-        'tuesday',
-        DateTime.wednesday =>
-        'wednesday',
-        DateTime.thursday =>
-        'thursday',
-        DateTime.friday =>
-        'friday',
-        DateTime.saturday =>
-        'saturday',
-        DateTime.sunday =>
-        'sunday',
-        _ => 'monday',
-      };
+    DateTime date,
+  ) {
+    return switch (date.weekday) {
+      DateTime.monday => 'monday',
+      DateTime.tuesday => 'tuesday',
+      DateTime.wednesday => 'wednesday',
+      DateTime.thursday => 'thursday',
+      DateTime.friday => 'friday',
+      DateTime.saturday => 'saturday',
+      DateTime.sunday => 'sunday',
+      _ => 'monday',
+    };
+  }
 
-  /// Returns active GTFS service IDs for the requested service day.
-  ///
-  /// It first checks calendar.txt and then applies calendar_dates.txt
-  /// exceptions.
-  Future<Set<String>>
-  activeServiceIds(
-      String operatorId,
-      DateTime serviceDate,
-      ) async {
+  Future<Set<String>> activeServiceIds(
+    String operatorId,
+    DateTime serviceDate,
+  ) async {
     final db = await database;
 
-    final key =
-    _dateKey(serviceDate);
+    final key = _dateKey(
+      serviceDate,
+    );
 
-    final weekday =
-    _weekdayColumn(serviceDate);
+    final weekday = _weekdayColumn(
+      serviceDate,
+    );
 
-    final baseRows =
-    await db.rawQuery(
+    final baseRows = await db.rawQuery(
       '''
       SELECT service_id
+
       FROM calendar_services
+
       WHERE operator_id = ?
         AND start_date <= ?
         AND end_date >= ?
@@ -568,85 +860,83 @@ class LocalGtfsStore {
 
     final services = baseRows
         .map(
-          (row) =>
-      row['service_id']
-      as String,
-    )
+          (row) => row['service_id'] as String,
+        )
         .toSet();
 
-    final exceptionRows =
-    await db.query(
+    final exceptionRows = await db.query(
       'calendar_dates',
       columns: [
         'service_id',
         'exception_type',
       ],
-      where:
-      'operator_id = ? AND date = ?',
+      where: 'operator_id = ? AND date = ?',
       whereArgs: [
         operatorId,
         key,
       ],
     );
 
-    for (final row
-    in exceptionRows) {
-      final serviceId =
-      row['service_id']
-      as String;
+    for (final row in exceptionRows) {
+      final serviceId = row['service_id'] as String;
 
-      final type =
-      (row['exception_type']
-      as num)
-          .toInt();
+      final type = (row['exception_type'] as num).toInt();
 
       if (type == 1) {
-        services.add(
-          serviceId,
-        );
-      } else if (type == 2) {
-        services.remove(
-          serviceId,
-        );
+        services.add(serviceId);
+      }
+
+      if (type == 2) {
+        services.remove(serviceId);
       }
     }
 
-    // Some mock/non-standard feeds may not include calendar information.
-    // In that case we allow all service IDs from trips.
+    /// Some feeds do not supply calendar.txt and rely only on trips.
+    ///
+    /// In that case allow all known service IDs so offline demo data
+    /// continues to function.
     if (services.isEmpty) {
-      final calendarCount =
-          Sqflite.firstIntValue(
+      final calendarCount = Sqflite.firstIntValue(
             await db.rawQuery(
-              'SELECT COUNT(*) '
-                  'FROM calendar_services '
-                  'WHERE operator_id = ?',
+              '''
+                  SELECT COUNT(*)
+
+                  FROM calendar_services
+
+                  WHERE operator_id = ?
+                  ''',
               [
                 operatorId,
               ],
             ),
           ) ??
-              0;
+          0;
 
-      final exceptionCount =
-          Sqflite.firstIntValue(
+      final exceptionCount = Sqflite.firstIntValue(
             await db.rawQuery(
-              'SELECT COUNT(*) '
-                  'FROM calendar_dates '
-                  'WHERE operator_id = ?',
+              '''
+                  SELECT COUNT(*)
+
+                  FROM calendar_dates
+
+                  WHERE operator_id = ?
+                  ''',
               [
                 operatorId,
               ],
             ),
           ) ??
-              0;
+          0;
 
-      if (calendarCount == 0 &&
-          exceptionCount == 0) {
-        final rows =
-        await db.rawQuery(
-          'SELECT DISTINCT service_id '
-              'FROM trips '
-              'WHERE operator_id = ?',
+      if (calendarCount == 0 && exceptionCount == 0) {
+        final rows = await db.rawQuery(
+          '''
+          SELECT DISTINCT service_id
+
+          FROM trips
+
+          WHERE operator_id = ?
+          ''',
           [
             operatorId,
           ],
@@ -655,16 +945,12 @@ class LocalGtfsStore {
         services.addAll(
           rows
               .map(
-                (row) =>
-            row['service_id']
-            as String?,
-          )
+                (row) => row['service_id'] as String?,
+              )
               .whereType<String>()
               .where(
-                (serviceId) =>
-            serviceId
-                .isNotEmpty,
-          ),
+                (serviceId) => serviceId.isNotEmpty,
+              ),
         );
       }
     }
@@ -676,15 +962,7 @@ class LocalGtfsStore {
   // DEPARTURES
   // ==============================================================
 
-  /// Returns upcoming departures for one GTFS service day.
-  ///
-  /// Important:
-  /// - calendar / calendar_dates are respected.
-  /// - frequency-based trips are expanded.
-  /// - terminal arrivals are NOT shown as departures.
-  /// - duplicate physical departures are removed.
-  Future<List<Map<String, Object?>>>
-  rawDepartures({
+  Future<List<Map<String, Object?>>> rawDepartures({
     required String operatorId,
     required String stopId,
     required DateTime serviceDate,
@@ -693,8 +971,7 @@ class LocalGtfsStore {
   }) async {
     final db = await database;
 
-    final active =
-    await activeServiceIds(
+    final active = await activeServiceIds(
       operatorId,
       serviceDate,
     );
@@ -703,24 +980,20 @@ class LocalGtfsStore {
       return const [];
     }
 
-    final placeholders =
-    List.filled(
+    final placeholders = List.filled(
       active.length,
       '?',
     ).join(',');
 
-    final serviceArgs =
-    active.toList();
+    final serviceArgs = active.toList();
 
-    final candidates =
-    <Map<String, Object?>>[];
+    final candidates = <Map<String, Object?>>[];
 
-    // ----------------------------------------------------------
+    // ------------------------------------------------------------
     // Normal scheduled trips
-    // ----------------------------------------------------------
+    // ------------------------------------------------------------
 
-    final scheduledRows =
-    await db.rawQuery(
+    final scheduledRows = await db.rawQuery(
       '''
       SELECT
         st.trip_id AS trip_id,
@@ -747,22 +1020,28 @@ class LocalGtfsStore {
         AND t.service_id IN ($placeholders)
         AND st.departure_seconds >= ?
 
-        -- Only treat this stop as a departure when the trip
-        -- continues to another stop afterwards.
         AND EXISTS (
           SELECT 1
+
           FROM stop_times next_st
-          WHERE next_st.operator_id = st.operator_id
-            AND next_st.trip_id = st.trip_id
-            AND next_st.sequence > st.sequence
+
+          WHERE next_st.operator_id =
+                st.operator_id
+            AND next_st.trip_id =
+                st.trip_id
+            AND next_st.sequence >
+                st.sequence
         )
 
-        -- Frequency trips are handled separately below.
         AND NOT EXISTS (
           SELECT 1
+
           FROM frequencies f
-          WHERE f.operator_id = st.operator_id
-            AND f.trip_id = st.trip_id
+
+          WHERE f.operator_id =
+                st.operator_id
+            AND f.trip_id =
+                st.trip_id
         )
 
       ORDER BY st.departure_seconds ASC
@@ -782,12 +1061,11 @@ class LocalGtfsStore {
       scheduledRows,
     );
 
-    // ----------------------------------------------------------
-    // Frequency-based trips
-    // ----------------------------------------------------------
+    // ------------------------------------------------------------
+    // GTFS frequency trips
+    // ------------------------------------------------------------
 
-    final frequencyRows =
-    await db.rawQuery(
+    final frequencyRows = await db.rawQuery(
       '''
       SELECT
         st.trip_id AS trip_id,
@@ -796,10 +1074,10 @@ class LocalGtfsStore {
           AS template_departure_seconds,
 
         (
-          SELECT MIN(
-            first.departure_seconds
-          )
+          SELECT MIN(first.departure_seconds)
+
           FROM stop_times first
+
           WHERE first.operator_id =
                 st.operator_id
             AND first.trip_id =
@@ -825,31 +1103,26 @@ class LocalGtfsStore {
       FROM stop_times st
 
       JOIN trips t
-        ON t.operator_id =
-           st.operator_id
-        AND t.trip_id =
-           st.trip_id
+        ON t.operator_id = st.operator_id
+        AND t.trip_id = st.trip_id
 
       JOIN frequencies f
-        ON f.operator_id =
-           st.operator_id
-        AND f.trip_id =
-           st.trip_id
+        ON f.operator_id = st.operator_id
+        AND f.trip_id = st.trip_id
 
       LEFT JOIN routes r
-        ON r.operator_id =
-           t.operator_id
-        AND r.route_id =
-           t.route_id
+        ON r.operator_id = t.operator_id
+        AND r.route_id = t.route_id
 
       WHERE st.operator_id = ?
         AND st.stop_id = ?
         AND t.service_id IN ($placeholders)
 
-        -- Prevent terminal arrivals from being shown as departures.
         AND EXISTS (
           SELECT 1
+
           FROM stop_times next_st
+
           WHERE next_st.operator_id =
                 st.operator_id
             AND next_st.trip_id =
@@ -865,137 +1138,74 @@ class LocalGtfsStore {
       ],
     );
 
-    // Expand frequency templates into actual departures.
-    for (final row
-    in frequencyRows) {
+    for (final row in frequencyRows) {
       final templateDeparture =
-      (row['template_departure_seconds']
-      as num)
-          .toInt();
+          (row['template_departure_seconds'] as num).toInt();
 
-      final templateStart =
-      (row['template_start_seconds']
-      as num?)
-          ?.toInt();
+      final templateStart = (row['template_start_seconds'] as num?)?.toInt();
 
-      final windowStart =
-      (row['frequency_start_seconds']
-      as num)
-          .toInt();
+      final windowStart = (row['frequency_start_seconds'] as num).toInt();
 
-      final windowEnd =
-      (row['frequency_end_seconds']
-      as num)
-          .toInt();
+      final windowEnd = (row['frequency_end_seconds'] as num).toInt();
 
-      final headway =
-      (row['headway_seconds']
-      as num)
-          .toInt();
+      final headway = (row['headway_seconds'] as num).toInt();
 
-      if (templateStart == null ||
-          headway <= 0) {
+      if (templateStart == null || headway <= 0) {
         continue;
       }
 
-      final offset =
-          templateDeparture -
-              templateStart;
+      final offset = templateDeparture - templateStart;
 
-      final firstPossible =
-          windowStart + offset;
+      final firstPossible = windowStart + offset;
 
-      var occurrenceStart =
-          windowStart;
+      var occurrenceStart = windowStart;
 
-      if (firstPossible <
-          fromSeconds) {
-        final steps =
-        ((fromSeconds -
-            firstPossible) /
-            headway)
-            .ceil();
+      if (firstPossible < fromSeconds) {
+        final steps = ((fromSeconds - firstPossible) / headway).ceil();
 
-        final safeSteps =
-        steps < 0
-            ? 0
-            : steps;
-
-        occurrenceStart +=
-            safeSteps * headway;
+        occurrenceStart += steps * headway;
       }
 
-      for (var tripStart =
-          occurrenceStart;
-      tripStart < windowEnd;
-      tripStart += headway) {
-        final departure =
-            tripStart + offset;
+      for (var tripStart = occurrenceStart;
+          tripStart < windowEnd;
+          tripStart += headway) {
+        final departure = tripStart + offset;
 
-        if (departure <
-            fromSeconds) {
+        if (departure < fromSeconds) {
           continue;
         }
 
         candidates.add(
           {
-            'trip_id':
-            row['trip_id'],
-            'departure_seconds':
-            departure,
-            'headsign':
-            row['headsign'],
-            'service_id':
-            row['service_id'],
-            'route_id':
-            row['route_id'],
-            'short_name':
-            row['short_name'],
-            'long_name':
-            row['long_name'],
-            'type':
-            row['type'],
+            'trip_id': row['trip_id'],
+            'departure_seconds': departure,
+            'headsign': row['headsign'],
+            'service_id': row['service_id'],
+            'route_id': row['route_id'],
+            'short_name': row['short_name'],
+            'long_name': row['long_name'],
+            'type': row['type'],
           },
         );
 
-        // Prevent very large frequency feeds from expanding unnecessarily.
-        if (candidates.length >=
-            limit * 12) {
+        if (candidates.length >= limit * 12) {
           break;
         }
       }
     }
 
-    // ----------------------------------------------------------
-    // Sort
-    // ----------------------------------------------------------
-
     candidates.sort(
-          (a, b) =>
-          (a['departure_seconds']
-          as num)
-              .toInt()
-              .compareTo(
-            (b['departure_seconds']
-            as num)
-                .toInt(),
+      (a, b) => (a['departure_seconds'] as num).toInt().compareTo(
+            (b['departure_seconds'] as num).toInt(),
           ),
     );
 
-    // ----------------------------------------------------------
-    // Remove duplicate physical departures
-    // ----------------------------------------------------------
+    final seen = <String>{};
 
-    final seen =
-    <String>{};
+    final result = <Map<String, Object?>>[];
 
-    final deduped =
-    <Map<String, Object?>>[];
-
-    for (final row
-    in candidates) {
-      final key =
-          '${row['route_id']}|'
+    for (final row in candidates) {
+      final key = '${row['route_id']}|'
           '${row['headsign']}|'
           '${row['departure_seconds']}';
 
@@ -1003,31 +1213,137 @@ class LocalGtfsStore {
         continue;
       }
 
-      deduped.add(
-        row,
-      );
+      result.add(row);
 
-      if (deduped.length >=
-          limit) {
+      if (result.length >= limit) {
         break;
       }
     }
 
-    return deduped;
+    return result;
   }
 
   // ==============================================================
-  // TRIP SHAPE
+  // JOURNEY PLANNER HELPERS
   // ==============================================================
 
-  Future<List<GtfsStop>> tripShape(
-      String operatorId,
-      String tripId,
-      ) async {
+  /// Finds the stop positions and schedule times for two stops
+  /// on exactly the same trip.
+  Future<Map<String, int>?> tripStopWindow({
+    required String operatorId,
+    required String tripId,
+    required String fromStopId,
+    required String toStopId,
+  }) async {
     final db = await database;
 
-    final rows =
-    await db.rawQuery(
+    final rows = await db.rawQuery(
+      '''
+      SELECT
+        origin.departure_seconds
+          AS from_seconds,
+
+        origin.sequence
+          AS from_sequence,
+
+        destination.departure_seconds
+          AS to_seconds,
+
+        destination.sequence
+          AS to_sequence
+
+      FROM stop_times origin
+
+      JOIN stop_times destination
+        ON destination.operator_id =
+           origin.operator_id
+        AND destination.trip_id =
+           origin.trip_id
+
+      WHERE origin.operator_id = ?
+        AND origin.trip_id = ?
+        AND origin.stop_id = ?
+        AND destination.stop_id = ?
+        AND destination.sequence >
+            origin.sequence
+
+      ORDER BY destination.sequence ASC
+
+      LIMIT 1
+      ''',
+      [
+        operatorId,
+        tripId,
+        fromStopId,
+        toStopId,
+      ],
+    );
+
+    if (rows.isEmpty) {
+      return null;
+    }
+
+    final row = rows.first;
+
+    return {
+      'from_seconds': (row['from_seconds'] as num).toInt(),
+      'from_sequence': (row['from_sequence'] as num).toInt(),
+      'to_seconds': (row['to_seconds'] as num).toInt(),
+      'to_sequence': (row['to_sequence'] as num).toInt(),
+    };
+  }
+
+  /// Every physical stop used by a specific route.
+  ///
+  /// Used by the transfer planner to find nearby interchanges between
+  /// Route A and Route B.
+  Future<List<GtfsStop>> routeStops({
+    required String operatorId,
+    required String routeId,
+  }) async {
+    final db = await database;
+
+    final rows = await db.rawQuery(
+      '''
+      SELECT DISTINCT
+        s.operator_id,
+        s.stop_id,
+        s.name,
+        s.lat,
+        s.lon
+
+      FROM stops s
+
+      JOIN stop_times st
+        ON st.operator_id = s.operator_id
+        AND st.stop_id = s.stop_id
+
+      JOIN trips t
+        ON t.operator_id = st.operator_id
+        AND t.trip_id = st.trip_id
+
+      WHERE t.operator_id = ?
+        AND t.route_id = ?
+
+      ORDER BY s.name COLLATE NOCASE ASC
+      ''',
+      [
+        operatorId,
+        routeId,
+      ],
+    );
+
+    return rows.map(GtfsStop.fromMap).toList();
+  }
+
+  /// Ordered route shape for a particular trip.
+  Future<List<GtfsStop>> tripShape(
+    String operatorId,
+    String tripId,
+  ) async {
+    final db = await database;
+
+    final rows = await db.rawQuery(
       '''
       SELECT
         s.operator_id,
@@ -1039,10 +1355,8 @@ class LocalGtfsStore {
       FROM stop_times st
 
       JOIN stops s
-        ON s.operator_id =
-           st.operator_id
-        AND s.stop_id =
-           st.stop_id
+        ON s.operator_id = st.operator_id
+        AND s.stop_id = st.stop_id
 
       WHERE st.operator_id = ?
         AND st.trip_id = ?
@@ -1055,19 +1369,10 @@ class LocalGtfsStore {
       ],
     );
 
-    return rows
-        .map(
-      GtfsStop.fromMap,
-    )
-        .toList();
+    return rows.map(GtfsStop.fromMap).toList();
   }
 
-  // ==============================================================
-  // SCHEDULED TIME FOR TRIP AT STOP
-  // ==============================================================
-
-  Future<int?>
-  scheduledTimeForTripAtStop({
+  Future<int?> scheduledTimeForTripAtStop({
     required String operatorId,
     required String tripId,
     required String stopId,
@@ -1079,8 +1384,7 @@ class LocalGtfsStore {
       columns: [
         'departure_seconds',
       ],
-      where:
-      'operator_id = ? '
+      where: 'operator_id = ? '
           'AND trip_id = ? '
           'AND stop_id = ?',
       whereArgs: [
@@ -1088,8 +1392,7 @@ class LocalGtfsStore {
         tripId,
         stopId,
       ],
-      orderBy:
-      'sequence ASC',
+      orderBy: 'sequence ASC',
       limit: 1,
     );
 
@@ -1097,29 +1400,25 @@ class LocalGtfsStore {
       return null;
     }
 
-    return (rows.first[
-    'departure_seconds']
-    as num)
-        .toInt();
+    return (rows.first['departure_seconds'] as num).toInt();
   }
 
   // ==============================================================
-  // CROWD DENSITY
+  // CROWDING
   // ==============================================================
 
-  Future<Map<int, int>>
-  hourlyDensity(
-      String operatorId,
-      String stopId,
-      ) async {
+  Future<Map<int, int>> hourlyDensity(
+    String operatorId,
+    String stopId,
+  ) async {
     final db = await database;
 
-    final rows =
-    await db.rawQuery(
+    final rows = await db.rawQuery(
       '''
       SELECT
         (departure_seconds / 3600) % 24
           AS hour,
+
         COUNT(*) AS n
 
       FROM stop_times
@@ -1137,10 +1436,7 @@ class LocalGtfsStore {
 
     return {
       for (final row in rows)
-        (row['hour'] as num)
-            .toInt():
-        (row['n'] as num)
-            .toInt(),
+        (row['hour'] as num).toInt(): (row['n'] as num).toInt(),
     };
   }
 
@@ -1161,9 +1457,27 @@ class LocalGtfsStore {
       'frequencies',
       'feed_meta',
     ]) {
-      await db.delete(
-        table,
-      );
+      await db.delete(table);
     }
   }
+}
+
+class _PlannerGroup {
+  _PlannerGroup({
+    required this.displayName,
+    required this.operatorId,
+    required this.routeId,
+    required this.routeShortName,
+    required this.routeLongName,
+    required this.routeType,
+  });
+
+  final String displayName;
+  final String operatorId;
+  final String routeId;
+  final String routeShortName;
+  final String routeLongName;
+  final int routeType;
+
+  final List<GtfsStop> stops = [];
 }
