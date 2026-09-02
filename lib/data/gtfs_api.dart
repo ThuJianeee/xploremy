@@ -3,7 +3,8 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:csv/csv.dart';
-import 'package:gtfs_realtime_bindings/gtfs_realtime_bindings.dart';
+import 'package:gtfs_realtime_bindings/gtfs_realtime_bindings.dart'
+    hide VehiclePosition;
 import 'package:http/http.dart' as http;
 
 import '../core/config.dart';
