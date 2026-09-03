@@ -92,7 +92,7 @@ class AuthService extends ChangeNotifier {
         data: {
           'full_name': fullName,
         },
-        emailRedirectTo: AppConfig.passwordResetRedirect,
+        emailRedirectTo: AppConfig.emailVerificationRedirect,
       );
     }
   }

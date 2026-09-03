@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/theme.dart';
 import 'auth_service.dart';
@@ -20,19 +23,103 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _confirm = TextEditingController();
   final _otp = TextEditingController();
 
+  StreamSubscription<AuthState>? _authSubscription;
+
   bool _busy = false;
   bool _awaitingOtp = false;
+  bool _awaitingEmailVerification = false;
+  bool _handlingEmailVerification = false;
 
   String? _error;
   String? _notice;
 
   @override
+  void initState() {
+    super.initState();
+
+    _authSubscription =
+        Supabase.instance.client.auth.onAuthStateChange.listen(
+              (state) {
+            unawaited(_handleAuthStateChange(state));
+          },
+        );
+  }
+
+  Future<void> _handleAuthStateChange(AuthState state) async {
+    if (!_awaitingEmailVerification) {
+      return;
+    }
+
+    if (_handlingEmailVerification) {
+      return;
+    }
+
+    if (state.event != AuthChangeEvent.signedIn) {
+      return;
+    }
+
+    if (state.session == null) {
+      return;
+    }
+
+    _handlingEmailVerification = true;
+    _awaitingEmailVerification = false;
+
+    final auth = context.read<AuthService>();
+    final messenger = ScaffoldMessenger.of(context);
+
+    try {
+      // Supabase email confirmation creates a session automatically.
+      // Sign out that temporary verification session so the user
+      // returns to the normal Login screen.
+      await auth.signOut();
+
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.of(context).popUntil(
+            (route) => route.isFirst,
+      );
+
+      WidgetsBinding.instance.addPostFrameCallback(
+            (_) {
+          messenger
+            ..hideCurrentSnackBar()
+            ..showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Email verified successfully. Please sign in.',
+                ),
+              ),
+            );
+        },
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _error =
+        'Email verified, but XploreMY could not return to sign in. '
+            'Please go back and sign in manually.';
+      });
+    } finally {
+      _handlingEmailVerification = false;
+    }
+  }
+
+  @override
   void dispose() {
+    _authSubscription?.cancel();
+
     _name.dispose();
     _identifier.dispose();
     _password.dispose();
     _confirm.dispose();
     _otp.dispose();
+
     super.dispose();
   }
 
@@ -59,7 +146,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
         fullName: _name.text.trim(),
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       if (AuthService.isPhone(_identifier.text)) {
         setState(() {
@@ -69,19 +158,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
         });
       } else {
         setState(() {
+          _awaitingEmailVerification = true;
           _notice =
-          'Account created. Check your inbox to confirm your email, then sign in.';
+          'Account created. Check your inbox to confirm your email.';
         });
       }
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         final message =
         e.toString().replaceFirst('AuthApiException: ', '');
 
         if (message.contains('WeakPasswordException') ||
-            message.toLowerCase().contains('password is known to be weak') ||
+            message
+                .toLowerCase()
+                .contains('password is known to be weak') ||
             message.toLowerCase().contains('pwned')) {
           _error =
           'This password is too common. Please choose a stronger password.';
@@ -118,11 +212,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
         token: _otp.text.trim(),
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       Navigator.of(context).pop();
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _error =
@@ -139,6 +237,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final formEnabled =
+        !_awaitingOtp && !_awaitingEmailVerification;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Create account'),
@@ -165,7 +266,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 TextFormField(
                   controller: _name,
-                  enabled: !_awaitingOtp,
+                  enabled: formEnabled,
                   textCapitalization: TextCapitalization.words,
                   decoration: const InputDecoration(
                     labelText: 'Full name',
@@ -192,7 +293,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 TextFormField(
                   controller: _identifier,
-                  enabled: !_awaitingOtp,
+                  enabled: formEnabled,
                   keyboardType: TextInputType.emailAddress,
                   decoration: const InputDecoration(
                     labelText: 'Email or phone number',
@@ -226,7 +327,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 TextFormField(
                   controller: _password,
                   obscureText: true,
-                  enabled: !_awaitingOtp,
+                  enabled: formEnabled,
                   decoration: const InputDecoration(
                     labelText: 'Password',
                     prefixIcon: Icon(
@@ -253,7 +354,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 TextFormField(
                   controller: _confirm,
                   obscureText: true,
-                  enabled: !_awaitingOtp,
+                  enabled: formEnabled,
                   decoration: const InputDecoration(
                     labelText: 'Confirm password',
                     prefixIcon: Icon(
@@ -329,16 +430,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 const SizedBox(height: 24),
 
-                FilledButton(
-                  onPressed: _busy
-                      ? null
-                      : (_awaitingOtp ? _verify : _submit),
-                  child: Text(
-                    _awaitingOtp
-                        ? 'Verify code'
-                        : 'Create account',
+                if (_awaitingEmailVerification)
+                  OutlinedButton(
+                    onPressed: _busy
+                        ? null
+                        : () {
+                      Navigator.of(context).pop();
+                    },
+                    child: const Text(
+                      'Back to sign in',
+                    ),
+                  )
+                else
+                  FilledButton(
+                    onPressed: _busy
+                        ? null
+                        : (_awaitingOtp ? _verify : _submit),
+                    child: Text(
+                      _awaitingOtp
+                          ? 'Verify code'
+                          : 'Create account',
+                    ),
                   ),
-                ),
               ],
             ),
           ),
