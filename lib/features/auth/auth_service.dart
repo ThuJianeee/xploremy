@@ -8,26 +8,43 @@ import '../../core/config.dart';
 /// Wraps Supabase Auth (email **or** phone) plus the `profiles` table.
 class AuthService extends ChangeNotifier {
   AuthService() {
-    _client.auth.onAuthStateChange.listen((event) {
-      _session = event.session;
+    _client.auth.onAuthStateChange.listen((state) {
+      _session = state.session;
 
-      if (_session == null) {
+      if (state.event == AuthChangeEvent.passwordRecovery &&
+          state.session != null) {
+        _isPasswordRecovery = true;
+        notifyListeners();
+        return;
+      }
+
+      if (_session == null || state.event == AuthChangeEvent.signedOut) {
+        _isPasswordRecovery = false;
         _profile = null;
         _favourites = const [];
         notifyListeners();
-      } else {
-        notifyListeners();
-        refreshProfile();
-        refreshFavourites();
+        return;
       }
+
+      notifyListeners();
+      _refreshUserDataSafely();
     });
 
     _session = _client.auth.currentSession;
 
     if (_session != null) {
-      refreshProfile();
-      refreshFavourites();
+      _refreshUserDataSafely();
     }
+  }
+
+  Future<void> _refreshUserDataSafely() async {
+    try {
+      await refreshProfile();
+    } catch (_) {}
+
+    try {
+      await refreshFavourites();
+    } catch (_) {}
   }
 
   final SupabaseClient _client = Supabase.instance.client;
@@ -35,8 +52,11 @@ class AuthService extends ChangeNotifier {
   Session? _session;
   UserProfile? _profile;
   List<FavouriteStop> _favourites = const [];
+  bool _isPasswordRecovery = false;
 
   bool get isSignedIn => _session != null;
+
+  bool get isPasswordRecovery => _isPasswordRecovery;
 
   User? get user => _session?.user;
 
@@ -159,6 +179,14 @@ class AuthService extends ChangeNotifier {
         password: newPassword,
       ),
     );
+  }
+
+  /// Completes an email password-recovery session and returns the app to the
+  /// signed-out state. The user must then sign in with the new password.
+  Future<void> completePasswordRecovery(String newPassword) async {
+    await updatePassword(newPassword);
+    _isPasswordRecovery = false;
+    await signOut();
   }
 
   // --------------------------------------------------------------- profile

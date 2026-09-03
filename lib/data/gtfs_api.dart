@@ -18,7 +18,9 @@ class GtfsApi {
   final http.Client _client;
 
   Future<GtfsStaticFeed> fetchStaticFeed(Operator op) async {
-    final response = await _client.get(op.staticUrl);
+    final response = await _client
+        .get(op.staticUrl)
+        .timeout(AppConfig.networkTimeout);
     if (response.statusCode != 200) {
       throw GtfsException(
         'GTFS-static request for ${op.shortName} failed '
@@ -66,7 +68,9 @@ class GtfsApi {
     final url = op.realtimeUrl;
     if (url == null) return const [];
 
-    final response = await _client.get(url);
+    final response = await _client
+        .get(url)
+        .timeout(AppConfig.networkTimeout);
     if (response.statusCode != 200) {
       throw GtfsException(
         'GTFS-realtime request for ${op.shortName} failed '
@@ -313,6 +317,12 @@ class GtfsStaticFeed {
   final DateTime fetchedAt;
 
   bool get isEmpty => stops.isEmpty;
+
+  bool get isUsable =>
+      stops.isNotEmpty &&
+      routes.isNotEmpty &&
+      trips.isNotEmpty &&
+      stopTimes.isNotEmpty;
 }
 
 class GtfsException implements Exception {

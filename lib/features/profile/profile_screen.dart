@@ -4,78 +4,154 @@ import 'package:provider/provider.dart';
 import '../../core/config.dart';
 import '../../core/theme.dart';
 import '../../data/transit_repository.dart';
+import '../../widgets/status_banner.dart';
 import '../auth/auth_service.dart';
+import '../auth/auth_validators.dart';
 import '../stop/stop_detail_screen.dart';
+import 'profile_edit_controller.dart';
+import 'widgets/change_password_dialog.dart';
+import 'widgets/profile_fields.dart';
+import 'widgets/profile_header.dart';
+import 'widgets/saved_stop_card.dart';
+import 'widgets/theme_mode_selector.dart';
 
 /// MODULE 4 (d) — manage profile information.
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  const ProfileScreen({
+    super.key,
+    this.editController,
+  });
+
+  final ProfileEditController? editController;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _phone = TextEditingController();
   final _city = TextEditingController();
 
   String? _operatorId;
-
   bool _busy = false;
   bool _initialised = false;
+  bool _trackingEdits = false;
+  String? _error;
+
+  late final ProfileEditController _editController;
+  late final bool _ownsEditController;
+
+  String _originalName = '';
+  String _originalPhone = '';
+  String _originalCity = '';
+  String? _originalOperatorId;
 
   @override
   void initState() {
     super.initState();
+    _ownsEditController = widget.editController == null;
+    _editController = widget.editController ?? ProfileEditController();
+    _editController.attachDiscard(_restoreOriginalValues);
 
-    WidgetsBinding.instance.addPostFrameCallback(
-          (_) => _hydrate(),
-    );
+    _name.addListener(_syncDirtyState);
+    _phone.addListener(_syncDirtyState);
+    _city.addListener(_syncDirtyState);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => _hydrate());
   }
 
   @override
   void dispose() {
+    _name.removeListener(_syncDirtyState);
+    _phone.removeListener(_syncDirtyState);
+    _city.removeListener(_syncDirtyState);
+    _editController.detachDiscard();
+    if (_ownsEditController) {
+      _editController.dispose();
+    }
+
     _name.dispose();
     _phone.dispose();
     _city.dispose();
-
     super.dispose();
   }
 
-  // --------------------------------------------------------------- hydrate
+  void _captureOriginalValues() {
+    _originalName = _name.text.trim();
+    _originalPhone = _phone.text.trim();
+    _originalCity = _city.text.trim();
+    _originalOperatorId = _operatorId;
+    _editController.setDirty(false);
+  }
+
+  void _syncDirtyState() {
+    if (!_trackingEdits || !_initialised) return;
+
+    final dirty =
+        _name.text.trim() != _originalName ||
+        _phone.text.trim() != _originalPhone ||
+        _city.text.trim() != _originalCity ||
+        _operatorId != _originalOperatorId;
+
+    _editController.setDirty(dirty);
+  }
+
+  void _restoreOriginalValues() {
+    if (!mounted) return;
+
+    _trackingEdits = false;
+    setState(() {
+      _name.text = _originalName;
+      _phone.text = _originalPhone;
+      _city.text = _originalCity;
+      _operatorId = _originalOperatorId;
+      _error = null;
+    });
+    _trackingEdits = true;
+    _editController.setDirty(false);
+  }
 
   Future<void> _hydrate() async {
     final auth = context.read<AuthService>();
+    setState(() => _error = null);
 
     try {
       await auth.refreshProfile();
       await auth.refreshFavourites();
-    } catch (_) {}
-
-    if (!mounted) {
-      return;
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _error =
+              'Profile data could not be refreshed. Cached account details are still available.';
+        });
+      }
     }
 
+    if (!mounted) return;
     final profile = auth.profile;
+    final metadataName = auth.user?.userMetadata?['full_name'] as String?;
 
+    _trackingEdits = false;
     setState(() {
-      _name.text = profile?.fullName ?? '';
+      _name.text = profile?.fullName ?? metadataName ?? '';
       _phone.text = profile?.phone ?? '';
       _city.text = profile?.homeCity ?? '';
       _operatorId = profile?.preferredOperator;
-
       _initialised = true;
     });
+    _captureOriginalValues();
+    _trackingEdits = true;
   }
 
-  // ------------------------------------------------------------------ save
-
   Future<void> _save() async {
-    final auth = context.read<AuthService>();
+    if (_busy || !_formKey.currentState!.validate()) return;
 
+    final auth = context.read<AuthService>();
     setState(() {
       _busy = true;
+      _error = null;
     });
 
     try {
@@ -86,520 +162,191 @@ class _ProfileScreenState extends State<ProfileScreen> {
         preferredOperator: _operatorId,
       );
 
-      if (!mounted) {
-        return;
-      }
-
+      if (!mounted) return;
+      _captureOriginalValues();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Profile saved'),
-        ),
+        const SnackBar(content: Text('Profile saved')),
       );
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Could not save: $e',
-          ),
-        ),
-      );
+      if (!mounted) return;
+      setState(() => _error = AuthValidators.friendlyError(e));
     } finally {
-      if (mounted) {
-        setState(() {
-          _busy = false;
-        });
-      }
+      if (mounted) setState(() => _busy = false);
     }
   }
-
-  // -------------------------------------------------------- password change
 
   Future<void> _changePassword() async {
-    final controller = TextEditingController();
-
-    // Get AuthService BEFORE any await.
-    final auth = context.read<AuthService>();
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text(
-            'Set a new password',
-          ),
-          content: TextField(
-            controller: controller,
-            obscureText: true,
-            decoration: const InputDecoration(
-              labelText: 'New password',
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                  false,
-                );
-              },
-              child: const Text(
-                'Cancel',
-              ),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                  true,
-                );
-              },
-              child: const Text(
-                'Update',
-              ),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (!mounted) {
-      controller.dispose();
-      return;
-    }
-
-    if (confirmed != true) {
-      controller.dispose();
-      return;
-    }
-
-    if (controller.text.length < 8) {
-      controller.dispose();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Password must be at least 8 characters',
-          ),
-        ),
-      );
-
-      return;
-    }
+    final newPassword = await showChangePasswordDialog(context);
+    if (!mounted || newPassword == null) return;
 
     try {
-      await auth.updatePassword(
-        controller.text,
-      );
-
-      if (!mounted) {
-        return;
-      }
-
+      await context.read<AuthService>().updatePassword(newPassword);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Password updated',
-          ),
-        ),
+        const SnackBar(content: Text('Password updated')),
       );
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('$e'),
-        ),
-      );
-    } finally {
-      controller.dispose();
+      if (!mounted) return;
+      setState(() => _error = AuthValidators.friendlyError(e));
     }
   }
 
-  // ---------------------------------------------------------- saved stop
+  Future<void> _confirmSignOut() async {
+    final shouldSignOut = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sign out?'),
+        content: Text(
+          _editController.isDirty
+              ? 'Unsaved profile changes will be discarded. You can sign in again at any time.'
+              : 'You can sign in again at any time.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Sign out'),
+          ),
+        ],
+      ),
+    );
 
-  Future<void> _openFavourite(
-      FavouriteStop favourite,
-      ) async {
+    if (shouldSignOut == true && mounted) {
+      await context.read<AuthService>().signOut();
+    }
+  }
+
+  Future<void> _openFavourite(FavouriteStop favourite) async {
     final repository = context.read<TransitRepository>();
-
     final stop = await repository.getStop(
       favourite.operatorId,
       favourite.stopId,
     );
 
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
     if (stop == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${favourite.stopName} is not available offline. '
-                'Download ${Operators.byId(favourite.operatorId).shortName} data first.',
+            '${favourite.stopName} is not available offline. Download ${Operators.byId(favourite.operatorId).shortName} data first.',
           ),
         ),
       );
-
       return;
     }
 
     await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => StopDetailScreen(
-          stop: stop,
-        ),
-      ),
+      MaterialPageRoute(builder: (_) => StopDetailScreen(stop: stop)),
     );
   }
 
-  // ------------------------------------------------------------------ build
+  Future<void> _removeFavourite(FavouriteStop favourite) async {
+    try {
+      await context.read<AuthService>().removeFavourite(favourite.stopId);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not remove favourite: $e')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthService>();
     final favourites = auth.favourites;
+    final metadataName = auth.user?.userMetadata?['full_name'] as String?;
+    final displayName = auth.profile?.fullName?.trim().isNotEmpty == true
+        ? auth.profile!.fullName!.trim()
+        : (metadataName?.trim().isNotEmpty == true
+            ? metadataName!.trim()
+            : 'Commuter');
 
     if (!_initialised) {
       return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Profile',
-        ),
+        title: const Text('Profile'),
         actions: [
           IconButton(
             tooltip: 'Sign out',
-            icon: const Icon(
-              Icons.logout,
-            ),
-            onPressed: auth.signOut,
+            icon: const Icon(Icons.logout),
+            onPressed: _busy ? null : _confirmSignOut,
           ),
         ],
       ),
-
       body: RefreshIndicator(
         onRefresh: _hydrate,
-
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-
-          padding: const EdgeInsets.fromLTRB(
-            16,
-            16,
-            16,
-            32,
-          ),
-
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
           children: [
-            // =========================================================
-            // PROFILE HEADER
-            // =========================================================
-
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 30,
-                  backgroundColor: AppTheme.trackNavy,
-                  child: Text(
-                    (auth.profile?.displayName ?? 'C')
-                        .characters
-                        .first
-                        .toUpperCase(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-
-                const SizedBox(
-                  width: 14,
-                ),
-
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment:
-                    CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        auth.profile?.displayName ??
-                            'Commuter',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-
-                      const SizedBox(
-                        height: 2,
-                      ),
-
-                      Text(
-                        auth.user?.email ??
-                            auth.user?.phone ??
-                            '',
-                        style: const TextStyle(
-                          color: AppTheme.slate,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+            ProfileHeader(
+              displayName: displayName,
+              accountLabel: auth.user?.email ?? auth.user?.phone ?? '',
             ),
-
-            const SizedBox(
-              height: 24,
-            ),
-
-            // =========================================================
-            // FULL NAME
-            // =========================================================
-
-            TextField(
-              controller: _name,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                labelText: 'Full name',
-                prefixIcon: Icon(
-                  Icons.badge_outlined,
-                ),
+            if (_error != null) ...[
+              const SizedBox(height: 16),
+              StatusBanner(
+                message: _error!,
+                color: AppTheme.hibiscus,
+                icon: Icons.error_outline,
+              ),
+            ],
+            const SizedBox(height: 24),
+            Form(
+              key: _formKey,
+              child: ProfileFields(
+                nameController: _name,
+                phoneController: _phone,
+                cityController: _city,
+                operatorId: _operatorId,
+                enabled: !_busy,
+                onOperatorChanged: (value) {
+                  setState(() => _operatorId = value);
+                  _syncDirtyState();
+                },
               ),
             ),
-
-            const SizedBox(
-              height: 14,
-            ),
-
-            // =========================================================
-            // CONTACT NUMBER
-            // =========================================================
-
-            TextField(
-              controller: _phone,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                labelText: 'Contact number',
-                prefixIcon: Icon(
-                  Icons.phone_outlined,
-                ),
-              ),
-            ),
-
-            const SizedBox(
-              height: 14,
-            ),
-
-            // =========================================================
-            // HOME CITY
-            // =========================================================
-
-            TextField(
-              controller: _city,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                labelText: 'Home city',
-                hintText:
-                'Kuala Lumpur, Johor Bahru, George Town…',
-                prefixIcon: Icon(
-                  Icons.location_city_outlined,
-                ),
-              ),
-            ),
-
-            const SizedBox(
-              height: 14,
-            ),
-
-            // =========================================================
-            // PREFERRED OPERATOR
-            // =========================================================
-
-            DropdownButtonFormField<String>(
-              initialValue: _operatorId,
-              decoration: const InputDecoration(
-                labelText: 'Preferred operator',
-                prefixIcon: Icon(
-                  Icons.commute_outlined,
-                ),
-              ),
-
-              items: [
-                for (final op in Operators.all)
-                  DropdownMenuItem<String>(
-                    value: op.id,
-                    child: Text(
-                      op.shortName,
-                    ),
-                  ),
-              ],
-
-              onChanged: (value) {
-                setState(() {
-                  _operatorId = value;
-                });
-              },
-            ),
-
-            const SizedBox(
-              height: 24,
-            ),
-
-            // =========================================================
-            // SAVE BUTTON
-            // =========================================================
-
+            const SizedBox(height: 24),
             FilledButton(
               onPressed: _busy ? null : _save,
-              child: Text(
-                _busy
-                    ? 'Saving...'
-                    : 'Save changes',
-              ),
+              child: Text(_busy ? 'Saving...' : 'Save changes'),
             ),
-
-            const SizedBox(
-              height: 10,
-            ),
-
-            // =========================================================
-            // CHANGE PASSWORD
-            // =========================================================
-
+            const SizedBox(height: 10),
             OutlinedButton.icon(
-              onPressed: _changePassword,
-              icon: const Icon(
-                Icons.password_outlined,
-              ),
-              label: const Text(
-                'Change password',
-              ),
+              onPressed: _busy ? null : _changePassword,
+              icon: const Icon(Icons.password_outlined),
+              label: const Text('Change password'),
             ),
-
-            const SizedBox(
-              height: 28,
-            ),
-
-            // =========================================================
-            // SAVED STOPS
-            // =========================================================
-
+            const SizedBox(height: 18),
+            const ThemeModeSelector(),
+            const SizedBox(height: 28),
             const Text(
               'Saved stops',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 16,
-              ),
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
             ),
-
-            const SizedBox(
-              height: 10,
-            ),
-
-            // =========================================================
-            // EMPTY SAVED STOPS
-            // =========================================================
-
+            const SizedBox(height: 10),
             if (favourites.isEmpty)
               const Text(
                 'Tap the star on any stop to keep it here.',
-                style: TextStyle(
-                  color: AppTheme.slate,
-                ),
+                style: TextStyle(color: AppTheme.slate),
               )
-
-            // =========================================================
-            // SAVED STOP LIST
-            // =========================================================
-
             else
               for (final favourite in favourites)
-                Card(
-                  margin: const EdgeInsets.only(
-                    bottom: 8,
-                  ),
-
-                  child: ListTile(
-                    leading: const Icon(
-                      Icons.star,
-                      color: AppTheme.hibiscus,
-                    ),
-
-                    title: Text(
-                      favourite.stopName,
-                    ),
-
-                    subtitle: Text(
-                      Operators.byId(
-                        favourite.operatorId,
-                      ).shortName,
-                    ),
-
-                    // Tap saved stop to open Stop Detail.
-                    onTap: () {
-                      _openFavourite(
-                        favourite,
-                      );
-                    },
-
-                    // Remove favourite.
-                    trailing: Builder(
-                      builder: (tileContext) {
-                        return IconButton(
-                          tooltip: 'Remove favourite',
-                          icon: const Icon(
-                            Icons.close,
-                          ),
-
-                          onPressed: () async {
-                            // Obtain everything that uses
-                            // BuildContext BEFORE the await.
-                            final authService =
-                            tileContext.read<AuthService>();
-
-                            final messenger =
-                            ScaffoldMessenger.of(
-                              tileContext,
-                            );
-
-                            try {
-                              await authService
-                                  .removeFavourite(
-                                favourite.stopId,
-                              );
-                            } catch (e) {
-                              if (!mounted) {
-                                return;
-                              }
-
-                              messenger.showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    'Could not remove: $e',
-                                  ),
-                                ),
-                              );
-                            }
-                          },
-                        );
-                      },
-                    ),
-                  ),
+                SavedStopCard(
+                  favourite: favourite,
+                  onOpen: () => _openFavourite(favourite),
+                  onRemove: () => _removeFavourite(favourite),
                 ),
           ],
         ),
