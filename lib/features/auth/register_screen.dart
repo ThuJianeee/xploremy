@@ -5,7 +5,10 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/theme.dart';
+import '../../widgets/password_field.dart';
+import '../../widgets/status_banner.dart';
 import 'auth_service.dart';
+import 'auth_validators.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -16,7 +19,6 @@ class RegisterScreen extends StatefulWidget {
 
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
-
   final _name = TextEditingController();
   final _identifier = TextEditingController();
   final _password = TextEditingController();
@@ -29,36 +31,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _awaitingOtp = false;
   bool _awaitingEmailVerification = false;
   bool _handlingEmailVerification = false;
-
   String? _error;
   String? _notice;
 
   @override
   void initState() {
     super.initState();
-
     _authSubscription =
-        Supabase.instance.client.auth.onAuthStateChange.listen(
-              (state) {
-            unawaited(_handleAuthStateChange(state));
-          },
-        );
+        Supabase.instance.client.auth.onAuthStateChange.listen((state) {
+      unawaited(_handleAuthStateChange(state));
+    });
   }
 
   Future<void> _handleAuthStateChange(AuthState state) async {
-    if (!_awaitingEmailVerification) {
-      return;
-    }
-
-    if (_handlingEmailVerification) {
-      return;
-    }
-
-    if (state.event != AuthChangeEvent.signedIn) {
-      return;
-    }
-
-    if (state.session == null) {
+    if (!_awaitingEmailVerification ||
+        _handlingEmailVerification ||
+        state.event != AuthChangeEvent.signedIn ||
+        state.session == null) {
       return;
     }
 
@@ -69,41 +58,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final messenger = ScaffoldMessenger.of(context);
 
     try {
-      // Supabase email confirmation creates a session automatically.
-      // Sign out that temporary verification session so the user
-      // returns to the normal Login screen.
       await auth.signOut();
+      if (!mounted) return;
 
-      if (!mounted) {
-        return;
-      }
-
-      Navigator.of(context).popUntil(
-            (route) => route.isFirst,
-      );
-
-      WidgetsBinding.instance.addPostFrameCallback(
-            (_) {
-          messenger
-            ..hideCurrentSnackBar()
-            ..showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Email verified successfully. Please sign in.',
-                ),
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Email verified successfully. Please sign in.',
               ),
-            );
-        },
-      );
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-
+            ),
+          );
+      });
+    } catch (_) {
+      if (!mounted) return;
       setState(() {
         _error =
-        'Email verified, but XploreMY could not return to sign in. '
-            'Please go back and sign in manually.';
+            'Email verified, but XploreMY could not return to sign in. Please go back and sign in manually.';
       });
     } finally {
       _handlingEmailVerification = false;
@@ -113,13 +87,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   void dispose() {
     _authSubscription?.cancel();
-
     _name.dispose();
     _identifier.dispose();
     _password.dispose();
     _confirm.dispose();
     _otp.dispose();
-
     super.dispose();
   }
 
@@ -129,66 +101,35 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _notice = null;
     });
 
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
-    setState(() {
-      _busy = true;
-    });
-
-    final auth = context.read<AuthService>();
+    if (_busy || !_formKey.currentState!.validate()) return;
+    setState(() => _busy = true);
 
     try {
-      await auth.register(
-        identifier: _identifier.text.trim(),
-        password: _password.text,
-        fullName: _name.text.trim(),
-      );
+      await context.read<AuthService>().register(
+            identifier: _identifier.text.trim(),
+            password: _password.text,
+            fullName: _name.text.trim(),
+          );
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       if (AuthService.isPhone(_identifier.text)) {
         setState(() {
           _awaitingOtp = true;
           _notice =
-          'We sent a 6-digit code by SMS. Enter it below to finish.';
+              'We sent a 6-digit code by SMS. Enter it below to finish.';
         });
       } else {
         setState(() {
           _awaitingEmailVerification = true;
-          _notice =
-          'Account created. Check your inbox to confirm your email.';
+          _notice = 'Account created. Check your inbox to confirm your email.';
         });
       }
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        final message =
-        e.toString().replaceFirst('AuthApiException: ', '');
-
-        if (message.contains('WeakPasswordException') ||
-            message
-                .toLowerCase()
-                .contains('password is known to be weak') ||
-            message.toLowerCase().contains('pwned')) {
-          _error =
-          'This password is too common. Please choose a stronger password.';
-        } else {
-          _error = message;
-        }
-      });
+      if (!mounted) return;
+      setState(() => _error = AuthValidators.friendlyError(e));
     } finally {
-      if (mounted) {
-        setState(() {
-          _busy = false;
-        });
-      }
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -198,54 +139,32 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _notice = null;
     });
 
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
-    setState(() {
-      _busy = true;
-    });
+    if (_busy || !_formKey.currentState!.validate()) return;
+    setState(() => _busy = true);
 
     try {
       await context.read<AuthService>().verifyPhoneOtp(
-        phone: _identifier.text.trim(),
-        token: _otp.text.trim(),
-      );
-
-      if (!mounted) {
-        return;
-      }
-
-      Navigator.of(context).pop();
+            phone: _identifier.text.trim(),
+            token: _otp.text.trim(),
+          );
+      if (mounted) Navigator.of(context).pop();
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _error =
-            e.toString().replaceFirst('AuthApiException: ', '');
-      });
+      if (!mounted) return;
+      setState(() => _error = AuthValidators.friendlyError(e));
     } finally {
-      if (mounted) {
-        setState(() {
-          _busy = false;
-        });
-      }
+      if (mounted) setState(() => _busy = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final formEnabled =
-        !_awaitingOtp && !_awaitingEmailVerification;
+    final formEnabled = !_awaitingOtp && !_awaitingEmailVerification;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create account'),
-      ),
+      appBar: AppBar(title: const Text('Create account')),
       body: SafeArea(
         child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: const EdgeInsets.all(20),
           child: Form(
             key: _formKey,
@@ -254,237 +173,126 @@ class _RegisterScreenState extends State<RegisterScreen> {
               children: [
                 Text(
                   'Save your favourite stops and sync them across devices.',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyMedium
-                      ?.copyWith(
-                    color: AppTheme.slate,
-                  ),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppTheme.slate,
+                      ),
                 ),
-
                 const SizedBox(height: 20),
-
                 TextFormField(
                   controller: _name,
                   enabled: formEnabled,
                   textCapitalization: TextCapitalization.words,
+                  textInputAction: TextInputAction.next,
                   decoration: const InputDecoration(
                     labelText: 'Full name',
-                    prefixIcon: Icon(
-                      Icons.badge_outlined,
-                    ),
+                    prefixIcon: Icon(Icons.badge_outlined),
                   ),
-                  validator: (value) {
-                    final name = value?.trim() ?? '';
-
-                    if (name.isEmpty) {
-                      return 'Please enter your name';
-                    }
-
-                    if (name.length < 2) {
-                      return 'Name must be at least 2 characters';
-                    }
-
-                    return null;
-                  },
+                  validator: AuthValidators.fullName,
                 ),
-
                 const SizedBox(height: 14),
-
                 TextFormField(
                   controller: _identifier,
                   enabled: formEnabled,
                   keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
                   decoration: const InputDecoration(
                     labelText: 'Email or phone number',
                     hintText: 'you@email.com or 012-345 6789',
-                    prefixIcon: Icon(
-                      Icons.alternate_email,
-                    ),
+                    prefixIcon: Icon(Icons.alternate_email),
                   ),
-                  validator: (value) {
-                    final identifier = value?.trim() ?? '';
-
-                    if (identifier.isEmpty) {
-                      return 'Please enter your email or phone number';
-                    }
-
-                    final looksEmail =
-                        identifier.contains('@') &&
-                            identifier.contains('.');
-
-                    if (!looksEmail &&
-                        !AuthService.isPhone(identifier)) {
-                      return 'Enter a valid email or Malaysian phone number';
-                    }
-
-                    return null;
-                  },
+                  validator: AuthValidators.identifier,
                 ),
-
                 const SizedBox(height: 14),
-
-                TextFormField(
+                PasswordField(
                   controller: _password,
-                  obscureText: true,
+                  label: 'Password',
                   enabled: formEnabled,
-                  decoration: const InputDecoration(
-                    labelText: 'Password',
-                    prefixIcon: Icon(
-                      Icons.lock_outline,
-                    ),
-                  ),
-                  validator: (value) {
-                    final password = value ?? '';
-
-                    if (password.isEmpty) {
-                      return 'Please enter your password';
-                    }
-
-                    if (password.length < 8) {
-                      return 'Password must be at least 8 characters';
-                    }
-
-                    return null;
-                  },
+                  validator: AuthValidators.strongPassword,
+                  textInputAction: TextInputAction.next,
                 ),
-
+                const SizedBox(height: 6),
+                Text(
+                  'Use 8+ characters with uppercase, lowercase and a number.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppTheme.slate,
+                      ),
+                ),
                 const SizedBox(height: 14),
-
-                TextFormField(
+                PasswordField(
                   controller: _confirm,
-                  obscureText: true,
+                  label: 'Confirm password',
                   enabled: formEnabled,
-                  decoration: const InputDecoration(
-                    labelText: 'Confirm password',
-                    prefixIcon: Icon(
-                      Icons.lock_reset_outlined,
-                    ),
+                  prefixIcon: Icons.lock_reset_outlined,
+                  validator: (value) => AuthValidators.confirmPassword(
+                    value,
+                    _password.text,
                   ),
-                  validator: (value) {
-                    final confirmPassword = value ?? '';
-
-                    if (confirmPassword.isEmpty) {
-                      return 'Please confirm your password';
-                    }
-
-                    if (confirmPassword != _password.text) {
-                      return 'Passwords do not match';
-                    }
-
-                    return null;
-                  },
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) => _submit(),
                 ),
-
                 if (_awaitingOtp) ...[
                   const SizedBox(height: 14),
-
                   TextFormField(
                     controller: _otp,
                     keyboardType: TextInputType.number,
                     maxLength: 6,
+                    textInputAction: TextInputAction.done,
                     decoration: const InputDecoration(
                       labelText: 'SMS code',
-                      prefixIcon: Icon(
-                        Icons.sms_outlined,
-                      ),
+                      prefixIcon: Icon(Icons.sms_outlined),
                       counterText: '',
                     ),
                     validator: (value) {
-                      if (!_awaitingOtp) {
-                        return null;
-                      }
-
+                      if (!_awaitingOtp) return null;
                       final code = value?.trim() ?? '';
-
-                      if (code.isEmpty) {
-                        return 'Please enter the SMS code';
-                      }
-
                       if (!RegExp(r'^\d{6}$').hasMatch(code)) {
                         return 'Enter the 6-digit SMS code';
                       }
-
                       return null;
                     },
+                    onFieldSubmitted: (_) => _verify(),
                   ),
                 ],
-
                 if (_notice != null) ...[
                   const SizedBox(height: 16),
-
-                  _Banner(
+                  StatusBanner(
                     message: _notice!,
                     color: AppTheme.signalTeal,
+                    icon: Icons.mark_email_read_outlined,
                   ),
                 ],
-
                 if (_error != null) ...[
                   const SizedBox(height: 16),
-
-                  _Banner(
+                  StatusBanner(
                     message: _error!,
                     color: AppTheme.hibiscus,
+                    icon: Icons.error_outline,
                   ),
                 ],
-
                 const SizedBox(height: 24),
-
                 if (_awaitingEmailVerification)
-                  OutlinedButton(
-                    onPressed: _busy
-                        ? null
-                        : () {
-                      Navigator.of(context).pop();
-                    },
-                    child: const Text(
-                      'Back to sign in',
-                    ),
+                  OutlinedButton.icon(
+                    onPressed: _busy ? null : () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.login),
+                    label: const Text('Back to sign in'),
                   )
                 else
                   FilledButton(
-                    onPressed: _busy
-                        ? null
-                        : (_awaitingOtp ? _verify : _submit),
-                    child: Text(
-                      _awaitingOtp
-                          ? 'Verify code'
-                          : 'Create account',
-                    ),
+                    onPressed: _busy ? null : (_awaitingOtp ? _verify : _submit),
+                    child: _busy
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(_awaitingOtp ? 'Verify code' : 'Create account'),
                   ),
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Banner extends StatelessWidget {
-  const _Banner({
-    required this.message,
-    required this.color,
-  });
-
-  final String message;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withValues(
-          alpha: 0.08,
-        ),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        message,
-        style: TextStyle(
-          color: color,
-          fontSize: 13,
         ),
       ),
     );

@@ -7,10 +7,14 @@ import 'package:provider/provider.dart';
 
 import '../../core/config.dart';
 import '../../core/geo.dart';
+import '../../core/station_names.dart';
 import '../../core/theme.dart';
 import '../../data/models.dart';
 import '../../data/transit_repository.dart';
+import '../../widgets/status_banner.dart';
 import '../auth/auth_service.dart';
+
+part 'widgets/departure_tile.dart';
 
 /// Stop details with calendar/frequency-aware departures and live vehicle
 /// positions where the official data.gov.my feed supports them.
@@ -30,6 +34,9 @@ class _StopDetailScreenState extends State<StopDetailScreen> {
   bool _loading = true;
   bool _isFavourite = false;
   DateTime? _updatedAt;
+  CrowdLevel? _crowd;
+  String? _error;
+  bool _refreshing = false;
   Timer? _ticker;
 
   @override
@@ -49,40 +56,69 @@ class _StopDetailScreenState extends State<StopDetailScreen> {
   }
 
   Future<void> _load({bool quiet = false}) async {
-    if (!quiet && mounted) setState(() => _loading = true);
+    if (_refreshing) return;
+    _refreshing = true;
+
+    if (!quiet && mounted) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
+
     final repo = context.read<TransitRepository>();
     final auth = context.read<AuthService>();
 
-    final departures = await repo.getDeparturesForStop(
-      operatorId: widget.stop.operatorId,
-      stopId: widget.stop.stopId,
-    );
-    final shape = departures.isEmpty
-        ? <GtfsStop>[]
-        : await repo.tripShape(widget.stop.operatorId, departures.first.tripId);
-    final vehicles = await repo.liveVehicles(widget.stop.operatorId);
+    try {
+      final departures = await repo.getDeparturesForStop(
+        operatorId: widget.stop.operatorId,
+        stopId: widget.stop.stopId,
+      );
+      final shape = departures.isEmpty
+          ? <GtfsStop>[]
+          : await repo.tripShape(
+              widget.stop.operatorId,
+              departures.first.tripId,
+            );
+      final vehicles = await repo.liveVehicles(widget.stop.operatorId);
+      final crowd = await repo.crowdLevel(
+        widget.stop.operatorId,
+        widget.stop.stopId,
+      );
 
-    var favourite = false;
-    if (auth.isSignedIn) {
-      try {
-        final favourites = await auth.favouriteStops();
-        favourite = favourites.any(
-          (f) =>
-              f.stopId == widget.stop.stopId &&
-              f.operatorId == widget.stop.operatorId,
-        );
-      } catch (_) {}
+      var favourite = false;
+      if (auth.isSignedIn) {
+        try {
+          final favourites = await auth.favouriteStops();
+          favourite = favourites.any(
+            (item) =>
+                item.stopId == widget.stop.stopId &&
+                item.operatorId == widget.stop.operatorId,
+          );
+        } catch (_) {}
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _departures = departures;
+        _shape = shape;
+        _vehicles = vehicles;
+        _crowd = crowd;
+        _isFavourite = favourite;
+        _updatedAt = DateTime.now();
+        _error = null;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error =
+            'Stop information could not be refreshed. Pull down to try again.';
+        _loading = false;
+      });
+    } finally {
+      _refreshing = false;
     }
-
-    if (!mounted) return;
-    setState(() {
-      _departures = departures;
-      _shape = shape;
-      _vehicles = vehicles;
-      _isFavourite = favourite;
-      _updatedAt = DateTime.now();
-      _loading = false;
-    });
   }
 
   Future<void> _toggleFavourite() async {
@@ -113,7 +149,7 @@ class _StopDetailScreenState extends State<StopDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.stop.name),
+        title: Text(cleanStationName(widget.stop.name)),
         actions: [
           IconButton(
             tooltip: _isFavourite ? 'Remove favourite' : 'Save stop',
@@ -129,6 +165,14 @@ class _StopDetailScreenState extends State<StopDetailScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(12, 12, 12, 32),
                 children: [
+                  if (_error != null) ...[
+                    StatusBanner(
+                      message: _error!,
+                      color: AppTheme.hibiscus,
+                      icon: Icons.error_outline,
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   _header(op),
                   const SizedBox(height: 12),
                   SizedBox(height: 190, child: _map()),
@@ -210,6 +254,12 @@ class _StopDetailScreenState extends State<StopDetailScreen> {
                       : 'Scheduled data only',
                   color: op.hasRealtime ? AppTheme.signalTeal : AppTheme.slate,
                 ),
+                if (_crowd != null)
+                  _pill(
+                    icon: Icons.groups_2_outlined,
+                    label: 'Typical crowd: ${_crowd!.label}',
+                    color: AppTheme.delayed,
+                  ),
               ],
             ),
             const SizedBox(height: 10),
@@ -269,7 +319,7 @@ class _StopDetailScreenState extends State<StopDetailScreen> {
         children: [
           TileLayer(
             urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            userAgentPackageName: 'my.xploremy.app',
+            userAgentPackageName: 'com.example.xploremy',
           ),
           if (line.length > 1)
             PolylineLayer(
@@ -309,121 +359,6 @@ class _StopDetailScreenState extends State<StopDetailScreen> {
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _DepartureTile extends StatelessWidget {
-  const _DepartureTile({required this.departure});
-
-  final Departure departure;
-
-  @override
-  Widget build(BuildContext context) {
-    final (statusColor, statusLabel) = switch (departure.reliability) {
-      Reliability.onTime => (AppTheme.onTime, 'On time'),
-      Reliability.delayed => (
-          AppTheme.delayed,
-          'Late by ${formatCountdown(departure.liveDelaySeconds!.abs())}'
-        ),
-      Reliability.early => (
-          AppTheme.signalTeal,
-          'Early by ${formatCountdown(departure.liveDelaySeconds!.abs())}'
-        ),
-      Reliability.scheduled => (AppTheme.slate, 'Scheduled'),
-    };
-
-    final routeDetails = departure.routeLongName.trim();
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              constraints: const BoxConstraints(minWidth: 56, maxWidth: 96),
-              decoration: BoxDecoration(
-                color: AppTheme.trackNavy,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                departure.routeLabel,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 12.5,
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    departure.headsign,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  if (routeDetails.isNotEmpty &&
-                      routeDetails.toLowerCase() !=
-                          departure.headsign.toLowerCase()) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      routeDetails,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 11.5,
-                        color: AppTheme.slate,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 3),
-                  Row(
-                    children: [
-                      Container(
-                        height: 7,
-                        width: 7,
-                        decoration: BoxDecoration(
-                          color: statusColor,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          '$statusLabel · ${formatDepartureTime(departure.scheduledAt)}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 12.5, color: statusColor),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              formatCountdown(departure.secondsUntil),
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: AppTheme.trackNavy,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

@@ -17,8 +17,10 @@ class AppConfig {
       'https://api.data.gov.my';
 
   /// The official docs recommend refreshing static feeds daily before service.
-  static const Duration staticFeedTtl =
-  Duration(days: 1);
+  static const Duration staticFeedTtl = Duration(days: 1);
+
+  /// Maximum wait time for public transport API requests.
+  static const Duration networkTimeout = Duration(seconds: 20);
 
   static const double nearbyRadiusMetres = 1500;
 }

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme.dart';
+import '../../widgets/status_banner.dart';
 import 'auth_service.dart';
+import 'auth_validators.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -12,7 +14,9 @@ class ForgotPasswordScreen extends StatefulWidget {
 }
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _identifier = TextEditingController();
+
   bool _busy = false;
   String? _message;
   bool _isError = false;
@@ -24,22 +28,29 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   }
 
   Future<void> _send() async {
+    if (_busy || !_formKey.currentState!.validate()) return;
+
     setState(() {
       _busy = true;
       _message = null;
+      _isError = false;
     });
+
     try {
-      await context.read<AuthService>().sendPasswordReset(_identifier.text);
+      await context.read<AuthService>().sendPasswordReset(
+            _identifier.text.trim(),
+          );
+      if (!mounted) return;
       setState(() {
-        _isError = false;
         _message = AuthService.isPhone(_identifier.text)
-            ? 'We sent a one-time code by SMS. Use it to sign in, then set a new password from your profile.'
-            : 'Check your inbox for a reset link.';
+            ? 'A one-time SMS sign-in code was requested. After signing in, set a new password from Profile.'
+            : 'Check your inbox for the password reset link.';
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isError = true;
-        _message = e.toString().replaceFirst('AuthApiException: ', '');
+        _message = AuthValidators.friendlyError(e);
       });
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -52,49 +63,57 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       appBar: AppBar(title: const Text('Reset password')),
       body: SafeArea(
         child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Enter the email or phone number you registered with and we\u2019ll send you a way back in.',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(color: AppTheme.slate),
-              ),
-              const SizedBox(height: 20),
-              TextFormField(
-                controller: _identifier,
-                decoration: const InputDecoration(
-                  labelText: 'Email or phone',
-                  prefixIcon: Icon(Icons.help_outline),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Enter the email or phone number you registered with and we’ll send reset instructions.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppTheme.slate,
+                      ),
                 ),
-              ),
-              if (_message != null) ...[
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: (_isError ? AppTheme.hibiscus : AppTheme.signalTeal)
-                        .withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(12),
+                const SizedBox(height: 20),
+                TextFormField(
+                  controller: _identifier,
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.done,
+                  decoration: const InputDecoration(
+                    labelText: 'Email or phone',
+                    prefixIcon: Icon(Icons.help_outline),
                   ),
-                  child: Text(
-                    _message!,
-                    style: TextStyle(
-                      color: _isError ? AppTheme.hibiscus : AppTheme.signalTeal,
-                      fontSize: 13,
-                    ),
+                  validator: AuthValidators.identifier,
+                  onFieldSubmitted: (_) => _send(),
+                ),
+                if (_message != null) ...[
+                  const SizedBox(height: 16),
+                  StatusBanner(
+                    message: _message!,
+                    color: _isError ? AppTheme.hibiscus : AppTheme.signalTeal,
+                    icon: _isError
+                        ? Icons.error_outline
+                        : Icons.mark_email_read_outlined,
                   ),
+                ],
+                const SizedBox(height: 24),
+                FilledButton(
+                  onPressed: _busy ? null : _send,
+                  child: _busy
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Send reset instructions'),
                 ),
               ],
-              const SizedBox(height: 24),
-              FilledButton(
-                onPressed: _busy ? null : _send,
-                child: const Text('Send reset instructions'),
-              ),
-            ],
+            ),
           ),
         ),
       ),
