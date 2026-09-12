@@ -7,7 +7,6 @@ class ProfileFields extends StatelessWidget {
   const ProfileFields({
     super.key,
     required this.nameController,
-    required this.phoneController,
     required this.cityController,
     required this.operatorId,
     required this.onOperatorChanged,
@@ -15,7 +14,6 @@ class ProfileFields extends StatelessWidget {
   });
 
   final TextEditingController nameController;
-  final TextEditingController phoneController;
   final TextEditingController cityController;
   final String? operatorId;
   final ValueChanged<String?> onOperatorChanged;
@@ -35,25 +33,6 @@ class ProfileFields extends StatelessWidget {
             prefixIcon: Icon(Icons.badge_outlined),
           ),
           validator: AuthValidators.fullName,
-        ),
-        const SizedBox(height: 14),
-        TextFormField(
-          controller: phoneController,
-          enabled: enabled,
-          keyboardType: TextInputType.phone,
-          textInputAction: TextInputAction.next,
-          decoration: const InputDecoration(
-            labelText: 'Contact number',
-            prefixIcon: Icon(Icons.phone_outlined),
-          ),
-          validator: (value) {
-            final phone = value?.trim() ?? '';
-            if (phone.isEmpty) return null;
-            if (!RegExp(r'^\+?[0-9 \-]{7,15}$').hasMatch(phone)) {
-              return 'Enter a valid phone number';
-            }
-            return null;
-          },
         ),
         const SizedBox(height: 14),
         TextFormField(
