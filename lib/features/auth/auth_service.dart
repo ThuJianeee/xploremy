@@ -3,9 +3,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/config.dart';
 
-/// MODULE 4 — user profiles.
-///
-/// Wraps Supabase Auth (email **or** phone) plus the `profiles` table.
 class AuthService extends ChangeNotifier {
   AuthService() {
     _client.auth.onAuthStateChange.listen((state) {
@@ -18,11 +15,17 @@ class AuthService extends ChangeNotifier {
         return;
       }
 
-      if (_session == null || state.event == AuthChangeEvent.signedOut) {
+      if (state.event == AuthChangeEvent.signedOut || state.session == null) {
         _isPasswordRecovery = false;
+        _session = null;
         _profile = null;
         _favourites = const [];
+
         notifyListeners();
+        return;
+      }
+
+      if (_isPasswordRecovery) {
         return;
       }
 
@@ -35,16 +38,6 @@ class AuthService extends ChangeNotifier {
     if (_session != null) {
       _refreshUserDataSafely();
     }
-  }
-
-  Future<void> _refreshUserDataSafely() async {
-    try {
-      await refreshProfile();
-    } catch (_) {}
-
-    try {
-      await refreshFavourites();
-    } catch (_) {}
   }
 
   final SupabaseClient _client = Supabase.instance.client;
@@ -62,115 +55,54 @@ class AuthService extends ChangeNotifier {
 
   UserProfile? get profile => _profile;
 
-  List<FavouriteStop> get favourites =>
-      List.unmodifiable(_favourites);
-
-  /// True when the identifier looks like a Malaysian/international phone
-  /// number rather than an email address.
-  static bool isPhone(String identifier) =>
-      !identifier.contains('@') &&
-          RegExp(r'^\+?[0-9 \-]{7,15}$').hasMatch(identifier);
-
-  static String normalisePhone(String raw) {
-    final value = raw.replaceAll(RegExp(r'[\s\-]'), '');
-
-    if (value.startsWith('+')) {
-      return value;
-    }
-
-    if (value.startsWith('0')) {
-      return '+60${value.substring(1)}';
-    }
-
-    if (value.startsWith('60')) {
-      return '+$value';
-    }
-
-    return '+$value';
+  List<FavouriteStop> get favourites {
+    return List.unmodifiable(_favourites);
   }
 
-  // -------------------------------------------------------------- register
+  Future<void> _refreshUserDataSafely() async {
+    try {
+      await refreshProfile();
+    } catch (_) {}
+
+    try {
+      await refreshFavourites();
+    } catch (_) {}
+  }
 
   Future<void> register({
-    required String identifier,
+    required String email,
     required String password,
     required String fullName,
   }) async {
-    if (isPhone(identifier)) {
-      await _client.auth.signUp(
-        phone: normalisePhone(identifier),
-        password: password,
-        data: {
-          'full_name': fullName,
-          'phone': normalisePhone(identifier),
-        },
-      );
-    } else {
-      await _client.auth.signUp(
-        email: identifier.trim(),
-        password: password,
-        data: {
-          'full_name': fullName,
-        },
-        emailRedirectTo: AppConfig.emailVerificationRedirect,
-      );
-    }
-  }
-
-  /// SMS registrations must confirm a one-time code.
-  Future<void> verifyPhoneOtp({
-    required String phone,
-    required String token,
-  }) async {
-    await _client.auth.verifyOTP(
-      type: OtpType.sms,
-      phone: normalisePhone(phone),
-      token: token,
+    await _client.auth.signUp(
+      email: email.trim().toLowerCase(),
+      password: password,
+      data: {
+        'full_name': fullName.trim(),
+      },
+      emailRedirectTo: AppConfig.emailVerificationRedirect,
     );
   }
 
-  // ------------------------------------------------------------------ login
-
   Future<void> signIn({
-    required String identifier,
+    required String email,
     required String password,
   }) async {
-    if (isPhone(identifier)) {
-      await _client.auth.signInWithPassword(
-        phone: normalisePhone(identifier),
-        password: password,
-      );
-    } else {
-      await _client.auth.signInWithPassword(
-        email: identifier.trim(),
-        password: password,
-      );
-    }
+    await _client.auth.signInWithPassword(
+      email: email.trim().toLowerCase(),
+      password: password,
+    );
   }
 
   Future<void> signOut() async {
     await _client.auth.signOut();
-
-    _session = null;
-    _profile = null;
-    _favourites = const [];
-
-    notifyListeners();
   }
 
-  // -------------------------------------------------------- forgot password
-
-  Future<void> sendPasswordReset(String identifier) async {
-    if (isPhone(identifier)) {
-      await _client.auth.signInWithOtp(
-        phone: normalisePhone(identifier),
-      );
-    } else {
-      await _client.auth.resetPasswordForEmail(
-        identifier.trim(),
-        redirectTo: AppConfig.passwordResetRedirect,
-      );
-    }
+  Future<void> sendPasswordReset(String email) async {
+    await _client.auth.resetPasswordForEmail(
+      email.trim().toLowerCase(),
+      redirectTo: AppConfig.passwordResetRedirect,
+    );
   }
 
   Future<void> updatePassword(String newPassword) async {
@@ -181,15 +113,19 @@ class AuthService extends ChangeNotifier {
     );
   }
 
-  /// Completes an email password-recovery session and returns the app to the
-  /// signed-out state. The user must then sign in with the new password.
-  Future<void> completePasswordRecovery(String newPassword) async {
-    await updatePassword(newPassword);
-    _isPasswordRecovery = false;
-    await signOut();
+  Future<void> completePasswordRecovery(
+    String newPassword,
+  ) async {
+    await _client.auth.updateUser(
+      UserAttributes(
+        password: newPassword,
+      ),
+    );
   }
 
-  // --------------------------------------------------------------- profile
+  Future<void> finishPasswordRecovery() async {
+    await _client.auth.signOut();
+  }
 
   Future<void> refreshProfile() async {
     final id = user?.id;
@@ -198,11 +134,8 @@ class AuthService extends ChangeNotifier {
       return;
     }
 
-    final data = await _client
-        .from('profiles')
-        .select()
-        .eq('id', id)
-        .maybeSingle();
+    final data =
+        await _client.from('profiles').select().eq('id', id).maybeSingle();
 
     if (data != null) {
       _profile = UserProfile.fromMap(data);
@@ -212,7 +145,6 @@ class AuthService extends ChangeNotifier {
 
   Future<void> saveProfile({
     String? fullName,
-    String? phone,
     String? homeCity,
     String? preferredOperator,
     String? avatarUrl,
@@ -225,26 +157,19 @@ class AuthService extends ChangeNotifier {
 
     final payload = <String, dynamic>{
       'id': id,
-      if (fullName != null) 'full_name': fullName,
-      if (phone != null) 'phone': phone,
-      if (homeCity != null) 'home_city': homeCity,
-      if (preferredOperator != null)
-        'preferred_operator': preferredOperator,
+      if (fullName != null) 'full_name': fullName.trim(),
+      if (homeCity != null) 'home_city': homeCity.trim(),
+      if (preferredOperator != null) 'preferred_operator': preferredOperator,
       if (avatarUrl != null) 'avatar_url': avatarUrl,
     };
 
-    final data = await _client
-        .from('profiles')
-        .upsert(payload)
-        .select()
-        .single();
+    final data =
+        await _client.from('profiles').upsert(payload).select().single();
 
     _profile = UserProfile.fromMap(data);
 
     notifyListeners();
   }
-
-  // ------------------------------------------------------- favourite stops
 
   Future<void> refreshFavourites() async {
     final id = user?.id;
@@ -264,9 +189,9 @@ class AuthService extends ChangeNotifier {
     _favourites = (rows as List)
         .map(
           (row) => FavouriteStop.fromMap(
-        row as Map<String, dynamic>,
-      ),
-    )
+            row as Map<String, dynamic>,
+          ),
+        )
         .toList();
 
     notifyListeners();
@@ -288,15 +213,15 @@ class AuthService extends ChangeNotifier {
     return (rows as List)
         .map(
           (row) => FavouriteStop.fromMap(
-        row as Map<String, dynamic>,
-      ),
-    )
+            row as Map<String, dynamic>,
+          ),
+        )
         .toList();
   }
 
   bool isFavourite(String stopId) {
     return _favourites.any(
-          (favourite) => favourite.stopId == stopId,
+      (favourite) => favourite.stopId == stopId,
     );
   }
 
@@ -328,7 +253,7 @@ class AuthService extends ChangeNotifier {
     );
 
     final existingIndex = _favourites.indexWhere(
-          (favourite) => favourite.stopId == stopId,
+      (favourite) => favourite.stopId == stopId,
     );
 
     if (existingIndex == -1) {
@@ -338,14 +263,18 @@ class AuthService extends ChangeNotifier {
       ];
     } else {
       final updated = [..._favourites];
+
       updated[existingIndex] = newFavourite;
+
       _favourites = updated;
     }
 
     notifyListeners();
   }
 
-  Future<void> removeFavourite(String stopId) async {
+  Future<void> removeFavourite(
+    String stopId,
+  ) async {
     final id = user?.id;
 
     if (id == null) {
@@ -361,7 +290,7 @@ class AuthService extends ChangeNotifier {
     _favourites = _favourites
         .where(
           (favourite) => favourite.stopId != stopId,
-    )
+        )
         .toList();
 
     notifyListeners();
@@ -372,7 +301,6 @@ class UserProfile {
   const UserProfile({
     required this.id,
     this.fullName,
-    this.phone,
     this.avatarUrl,
     this.homeCity,
     this.preferredOperator,
@@ -380,27 +308,27 @@ class UserProfile {
 
   final String id;
   final String? fullName;
-  final String? phone;
   final String? avatarUrl;
   final String? homeCity;
   final String? preferredOperator;
 
-  String get displayName =>
-      (fullName?.trim().isNotEmpty ?? false)
-          ? fullName!.trim()
-          : 'Commuter';
+  String get displayName {
+    if (fullName?.trim().isNotEmpty ?? false) {
+      return fullName!.trim();
+    }
+
+    return 'Commuter';
+  }
 
   factory UserProfile.fromMap(
-      Map<String, dynamic> map,
-      ) {
+    Map<String, dynamic> map,
+  ) {
     return UserProfile(
       id: map['id'] as String,
       fullName: map['full_name'] as String?,
-      phone: map['phone'] as String?,
       avatarUrl: map['avatar_url'] as String?,
       homeCity: map['home_city'] as String?,
-      preferredOperator:
-      map['preferred_operator'] as String?,
+      preferredOperator: map['preferred_operator'] as String?,
     );
   }
 }
@@ -417,14 +345,12 @@ class FavouriteStop {
   final String operatorId;
 
   factory FavouriteStop.fromMap(
-      Map<String, dynamic> map,
-      ) {
+    Map<String, dynamic> map,
+  ) {
     return FavouriteStop(
       stopId: map['stop_id'] as String,
       stopName: map['stop_name'] as String,
-      operatorId:
-      (map['operator'] as String?) ??
-          'rapid-rail-kl',
+      operatorId: (map['operator'] as String?) ?? 'rapid-rail-kl',
     );
   }
 }

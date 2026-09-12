@@ -45,7 +45,9 @@ class _PasswordFieldState extends State<PasswordField> {
               ? () => setState(() => _obscure = !_obscure)
               : null,
           icon: Icon(
-            _obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+            _obscure
+                ? Icons.visibility_outlined
+                : Icons.visibility_off_outlined,
           ),
         ),
       ),

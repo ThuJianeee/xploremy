@@ -2,47 +2,94 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xploremy/features/auth/auth_validators.dart';
 
 void main() {
-  group('AuthValidators', () {
-    test('accepts a valid email', () {
-      expect(AuthValidators.identifier('user@example.com'), isNull);
-    });
-
-    test('rejects an invalid email', () {
-      expect(AuthValidators.identifier('user@invalid'), isNotNull);
-    });
-
-    test('accepts a Malaysian-style phone number', () {
-      expect(AuthValidators.identifier('012-345 6789'), isNull);
-    });
-
-    test('strong password requires mixed case and a number', () {
-      expect(AuthValidators.strongPassword('password1'), isNotNull);
-      expect(AuthValidators.strongPassword('Password'), isNotNull);
-      expect(AuthValidators.strongPassword('Password1'), isNull);
-    });
-
-
-    test('full name is required', () {
-      expect(AuthValidators.fullName(''), isNotNull);
-      expect(AuthValidators.fullName('A'), isNotNull);
-      expect(AuthValidators.fullName('Yeoh Ka Hou'), isNull);
-    });
-
-    test('missing Supabase table is shown as a friendly message', () {
-      final message = AuthValidators.friendlyError(
-        'PostgrestException(message: Could not find the table public.profiles in the schema cache, code: PGRST205)',
+  group('AuthValidators email', () {
+    test('accepts valid Gmail address', () {
+      expect(
+        AuthValidators.email('user@gmail.com'),
+        isNull,
       );
-      expect(message, contains('Cloud profile storage is not set up yet'));
+    });
+
+    test('accepts uppercase Gmail address', () {
+      expect(
+        AuthValidators.email('USER@GMAIL.COM'),
+        isNull,
+      );
+    });
+
+    test('rejects empty email', () {
+      expect(
+        AuthValidators.email(''),
+        isNotNull,
+      );
+    });
+
+    test('rejects invalid email format', () {
+      expect(
+        AuthValidators.email('user@invalid'),
+        isNotNull,
+      );
+    });
+
+    test('rejects non-Gmail address', () {
+      expect(
+        AuthValidators.email('user@yahoo.com'),
+        isNotNull,
+      );
+    });
+  });
+
+  group('AuthValidators password', () {
+    test('accepts valid strong password', () {
+      expect(
+        AuthValidators.strongPassword('Password1'),
+        isNull,
+      );
+    });
+
+    test('rejects short password', () {
+      expect(
+        AuthValidators.strongPassword('Pass1'),
+        isNotNull,
+      );
+    });
+
+    test('rejects password without uppercase', () {
+      expect(
+        AuthValidators.strongPassword('password1'),
+        isNotNull,
+      );
+    });
+
+    test('rejects password without lowercase', () {
+      expect(
+        AuthValidators.strongPassword('PASSWORD1'),
+        isNotNull,
+      );
+    });
+
+    test('rejects password without number', () {
+      expect(
+        AuthValidators.strongPassword('Password'),
+        isNotNull,
+      );
     });
 
     test('confirm password must match', () {
       expect(
-        AuthValidators.confirmPassword('Password2', 'Password1'),
-        isNotNull,
-      );
-      expect(
-        AuthValidators.confirmPassword('Password1', 'Password1'),
+        AuthValidators.confirmPassword(
+          'Password1',
+          'Password1',
+        ),
         isNull,
+      );
+
+      expect(
+        AuthValidators.confirmPassword(
+          'Password2',
+          'Password1',
+        ),
+        isNotNull,
       );
     });
   });

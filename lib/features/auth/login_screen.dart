@@ -19,7 +19,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _identifier = TextEditingController();
+  final _email = TextEditingController();
   final _password = TextEditingController();
 
   bool _busy = false;
@@ -27,7 +27,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
-    _identifier.dispose();
+    _email.dispose();
     _password.dispose();
     super.dispose();
   }
@@ -42,14 +42,19 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       await context.read<AuthService>().signIn(
-            identifier: _identifier.text.trim(),
+            email: _email.text.trim(),
             password: _password.text,
           );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = AuthValidators.friendlyError(e));
+
+      setState(() {
+        _error = AuthValidators.friendlyError(e);
+      });
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+      }
     }
   }
 
@@ -88,23 +93,23 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Sign in with your email or phone number',
+                        'Sign in with your Gmail account',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: AppTheme.slate,
                             ),
                       ),
                       const SizedBox(height: 20),
                       TextFormField(
-                        controller: _identifier,
+                        controller: _email,
                         keyboardType: TextInputType.emailAddress,
-                        autofillHints: const [AutofillHints.username],
+                        autofillHints: const [AutofillHints.email],
                         textInputAction: TextInputAction.next,
                         decoration: const InputDecoration(
-                          labelText: 'Email or phone',
-                          hintText: 'you@email.com or 012-345 6789',
-                          prefixIcon: Icon(Icons.person_outline),
+                          labelText: 'Gmail address',
+                          hintText: 'example@gmail.com',
+                          prefixIcon: Icon(Icons.email_outlined),
                         ),
-                        validator: AuthValidators.identifier,
+                        validator: AuthValidators.email,
                       ),
                       const SizedBox(height: 14),
                       PasswordField(
@@ -140,12 +145,14 @@ class _LoginScreenState extends State<LoginScreen> {
                       TextButton(
                         onPressed: _busy
                             ? null
-                            : () => Navigator.of(context).push(
+                            : () {
+                                Navigator.of(context).push(
                                   MaterialPageRoute(
                                     builder: (_) =>
                                         const ForgotPasswordScreen(),
                                   ),
-                                ),
+                                );
+                              },
                         child: const Text('Forgot password?'),
                       ),
                     ],
@@ -156,15 +163,19 @@ class _LoginScreenState extends State<LoginScreen> {
               OutlinedButton(
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white,
-                  side: const BorderSide(color: Colors.white54),
+                  side: const BorderSide(
+                    color: Colors.white54,
+                  ),
                 ),
                 onPressed: _busy
                     ? null
-                    : () => Navigator.of(context).push(
+                    : () {
+                        Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => const RegisterScreen(),
                           ),
-                        ),
+                        );
+                      },
                 child: const Text('Create a new account'),
               ),
             ],

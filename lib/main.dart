@@ -29,9 +29,15 @@ class XploreMyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthService()),
-        ChangeNotifierProvider(create: (_) => ThemeController()..load()),
-        Provider(create: (_) => TransitRepository()),
+        ChangeNotifierProvider(
+          create: (_) => AuthService(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => ThemeController()..load(),
+        ),
+        Provider(
+          create: (_) => TransitRepository(),
+        ),
       ],
       child: Consumer<ThemeController>(
         builder: (context, theme, _) {
@@ -55,9 +61,15 @@ class _AuthGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthService>();
+
     if (auth.isPasswordRecovery) {
       return const NewPasswordScreen();
     }
-    return auth.isSignedIn ? const AppShell() : const LoginScreen();
+
+    if (auth.isSignedIn) {
+      return const AppShell();
+    }
+
+    return const LoginScreen();
   }
 }
