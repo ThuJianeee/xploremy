@@ -231,7 +231,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Password updated'),
+          content: Text('Password is updated'),
         ),
       );
     } catch (e) {
