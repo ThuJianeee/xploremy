@@ -67,13 +67,13 @@ extension TransitSyncRepository on TransitRepository {
             force: force,
           ),
         );
-      } catch (e) {
+      } catch (_) {
         results.add(
           SyncResult(
             operator: op,
             skipped: false,
             stops: 0,
-            error: '$e',
+            error: 'Download failed',
           ),
         );
       }
@@ -82,18 +82,7 @@ extension TransitSyncRepository on TransitRepository {
     return results;
   }
 
-  Future<void> loadMockFeed() async {
-    for (final feed in buildMockFeeds()) {
-      await _store.saveFeed(feed);
-    }
-  }
-
   Future<void> clearCache() {
     return _store.clear();
   }
-
-  // ==============================================================
-  // STOPS
-  // ==============================================================
-
 }

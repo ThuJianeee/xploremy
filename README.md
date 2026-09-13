@@ -1,7 +1,6 @@
 # XploreMY
 
-XploreMY is a Flutter public-transport companion for Malaysia built around the
-official `api.data.gov.my` GTFS APIs and Supabase authentication.
+XploreMY is a Flutter public-transport companion for Malaysia built on official `api.data.gov.my` GTFS data, local SQLite caching, device location, OpenStreetMap tiles, and Supabase account services. The project supports SDG 9 by improving access to public-transport information through a unified mobile interface.
 
 ## Quick start
 
@@ -10,115 +9,113 @@ flutter pub get
 flutter run
 ```
 
-The project currently targets Android. Location and Internet permissions are
-already declared in `android/app/src/main/AndroidManifest.xml`.
+The final application targets Android with application ID `com.xploremy.app`. Internet and location permissions are declared in `android/app/src/main/AndroidManifest.xml`.
 
-## What is implemented
+## Final features
 
 | Area | Implementation |
 | --- | --- |
-| Auth | Email/phone registration, sign in/out, password reset/update, Supabase profile persistence |
-| Nearby stops | Real device GPS, distance sorting, operator filters, list/map view |
-| Static GTFS | Downloads and caches official GTFS ZIP feeds in SQLite |
-| Correct service dates | Parses `calendar.txt` and `calendar_dates.txt` so only services running on the selected day are shown |
-| Frequency schedules | Parses `frequencies.txt` and expands template trips at query time; this is essential for Rapid Rail KL |
-| Stop detail | Correct upcoming schedule, route/destination, countdown, map and favourite stops |
-| Realtime | Official GTFS-Realtime vehicle-position dots for operators that publish a stable feed |
-| Offline | Cached static stops and schedules continue to work without Internet |
+| User account | Gmail-only registration and login, email verification, forgot password, password recovery, profile editing, password change, logout |
+| Nearby stops | Device GPS, radius search, operator and rail/bus filters, list view and OpenStreetMap view |
+| Route planner | Direct journeys, one-transfer journeys, walking-transfer estimation, recent journeys and saved journeys |
+| Official GTFS | Downloads static GTFS feeds from `api.data.gov.my` and stores them in SQLite |
+| Service calendar | Uses `calendar.txt` and `calendar_dates.txt` to show services that run on the selected date |
+| Frequency schedules | Uses `frequencies.txt` when an operator publishes frequency-based service |
+| Stop detail | Station information, scheduled departures, countdowns, route destination, service activity and route map |
+| Realtime vehicles | Shows official GTFS-Realtime vehicle-position markers for operators with a configured public feed |
+| Favourite stops | Saves and removes favourite stops through Supabase and opens them again from Profile |
+| Offline data | Downloaded stops and timetables remain available without an Internet connection |
+| Appearance | Light, dark and system theme modes |
 
-## Important realtime behaviour
+## Departure and realtime behaviour
 
-The official data.gov.my GTFS-Realtime API currently publishes **vehicle
-positions**. It does not currently provide public GTFS-RT TripUpdates for this
-app to consume. Therefore XploreMY does **not fabricate live arrival times**:
+XploreMY separates scheduled departures from realtime vehicle information. Departure times are calculated from the official static GTFS timetable. Operators with a configured GTFS-Realtime vehicle-position feed can additionally show live vehicle markers. The app does not label a scheduled departure as a live arrival when realtime TripUpdates are unavailable.
 
-- departure times/countdowns come from the official static GTFS schedule;
-- live vehicle dots come from the GTFS-Realtime vehicle-position feed;
-- operators without a stable realtime endpoint are clearly marked
-  `Scheduled data only`.
+Service activity on Stop Detail is a timetable-density indicator derived from the number of scheduled departures during the current hour compared with the busiest hour for that stop. It is not a passenger-count or crowd-measurement dataset.
 
-Rapid Rail KL has an official static GTFS feed but the public realtime rail
-feed is not currently documented as stable, so LRT/MRT/Monorail departures are
-schedule-based.
+## Route planner scope
 
-## Why the timetable engine was changed
-
-Rapid Rail KL includes `frequencies.txt`. Earlier code read only
-`stop_times.txt`, which exposed template times such as `06:00` and `06:26` and
-could incorrectly wrap a past departure by 24 hours. The current engine:
-
-1. checks the service date using `calendar.txt` + `calendar_dates.txt`;
-2. expands frequency windows using the template trip stop offset;
-3. removes duplicate departures from overlapping service definitions;
-4. converts GTFS times >= 24:00 to a real local `DateTime`;
-5. labels tomorrow's service explicitly instead of silently adding 24 hours.
+The planner searches for direct journeys first. If no suitable direct journey is available, it can search for a one-transfer journey and estimate a short walking connection between nearby interchange stops. Walking-transfer time is an estimate based on stop distance rather than pedestrian turn-by-turn routing.
 
 ## Data sources
 
-Static API pattern:
+Static GTFS pattern:
 
 ```text
 https://api.data.gov.my/gtfs-static/<agency>
 ```
 
-Realtime vehicle positions:
+Realtime vehicle positions pattern:
 
 ```text
 https://api.data.gov.my/gtfs-realtime/vehicle-position/<agency>
 ```
 
-`lib/core/config.dart` contains the supported operator endpoints, including
-KTMB, Prasarana Rapid Rail/Bus services and the currently documented BAS.MY
-services.
+Supported operator endpoints are defined in `lib/core/config.dart`. Static feeds are refreshed at most once per day unless the user forces an update from Offline data.
 
-Static feeds are refreshed at most once per day unless the user forces a
-refresh from **Offline data**.
-
-## First run / database upgrade
-
-SQLite schema version 2 adds service calendars and frequency windows. If an
-older v1 cache exists, XploreMY clears that old timetable cache once because it
-cannot produce trustworthy departures without those tables.
-
-After upgrading, open **Offline data** and download the operator feed(s) you
-want. XploreMY no longer silently inserts demo timetable data into the main
-cache.
+Map tiles are provided by OpenStreetMap and the application displays `© OpenStreetMap contributors` on map views.
 
 ## Supabase
 
-Client-side publishable Supabase settings live in `lib/core/config.dart`.
-Never place a Supabase service-role key in the mobile app.
+Client-side publishable Supabase settings are stored in `lib/core/config.dart`. A service-role key must never be placed in the mobile application.
 
 Expected tables:
 
-- `profiles`: `id`, `full_name`, `phone`, `avatar_url`, `home_city`,
-  `preferred_operator`
-- `favourite_stops`: `user_id`, `stop_id`, `stop_name`, `operator`,
-  `created_at`
+- `profiles`: `id`, `full_name`, `avatar_url`, `home_city`, `preferred_operator`
+- `favourite_stops`: `user_id`, `stop_id`, `stop_name`, `operator`, `created_at`
 
-## Tests and checks
+Authentication is Gmail-only at the application-validation layer. Password-reset and email-verification links use the custom `xploremy://` deep-link scheme.
+For the final Supabase project, Email OTP/link expiration should be configured to `300` seconds so verification and password-reset links expire after five minutes.
 
-Run before committing:
+## Team module ownership
 
-```bash
-flutter analyze
-flutter test
-```
+| Member | Final module | Main responsibility |
+| --- | --- | --- |
+| Thu Jianee | Data & API / Offline Data | GTFS download, parsing, SQLite caching, service calendars, frequency data and offline synchronization |
+| Thean Zhi Hao | Nearby Stops & Route Planner | GPS, nearby-stop discovery, filters, map view, direct journey planning, one-transfer planning and journey history |
+| Yeoh Ka Hou | Stop Detail / Scheduled Departures & Realtime Vehicle Information | Stop detail, timetable retrieval, countdowns, route map, vehicle markers, service activity and favourite-stop integration |
+| Wong Kah Jian | User Account & Profile | Gmail authentication, verification, forgot/reset password, profile editing, password change, theme and logout |
 
-The existing unit tests cover GTFS time parsing, countdown formatting,
-distance formatting and haversine calculations.
+`lib/main.dart`, `lib/features/shell/app_shell.dart`, shared theme files and integration/testing are shared system-integration work.
 
 ## Main project layout
 
 ```text
 lib/
-  core/        configuration, theme, geolocation helpers
-  data/        GTFS API, SQLite cache, models, repository
+  core/        configuration, theme, location and station helpers
+  data/        GTFS API, SQLite store, models and transport repositories
   features/
-    auth/      authentication screens + AuthService
-    home/      nearby stops
-    stop/      timetable + realtime vehicle map
-    profile/   profile + saved stops
-    data_sync/ official feed downloads
+    auth/      Gmail authentication and password recovery
+    data_sync/ official GTFS feed download and offline management
+    home/      nearby stops, filtering and map view
+    planner/   direct and one-transfer journey planning
+    profile/   profile, password change, theme and saved stops
     shell/     bottom navigation
+    stop/      stop detail, timetable and realtime vehicle map
+  widgets/     shared UI components
+```
+
+## Final checks
+
+Run before submission:
+
+```bash
+dart format lib test
+flutter analyze
+flutter test
+flutter build apk --release
+git diff --check
+```
+
+Recommended smoke-test flow:
+
+```text
+Register -> Verify email -> Login
+Forgot password -> Reset password -> Login with new password
+Profile -> Change password -> Logout -> Login with new password
+Offline data -> Download operator feed
+Nearby -> Search/filter -> Map -> Open stop
+Stop Detail -> Departures -> Favourite
+Planner -> Direct journey -> One-transfer journey -> Saved/recent journeys
+Theme -> Light/Dark/System
 ```

@@ -67,10 +67,6 @@ extension LocalGtfsStopStore on LocalGtfsStore {
     return stops.take(limit).toList();
   }
 
-  // ==============================================================
-  // NORMAL STOP SEARCH
-  // ==============================================================
-
   Future<List<GtfsStop>> searchStops(
     String query, {
     int limit = 30,
@@ -120,9 +116,4 @@ extension LocalGtfsStopStore on LocalGtfsStore {
       rows.first,
     );
   }
-
-  // ==============================================================
-  // ROUTE PLANNER STATION SEARCH
-  // ==============================================================
-
 }

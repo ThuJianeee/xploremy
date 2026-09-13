@@ -65,10 +65,6 @@ extension LocalGtfsJourneyStore on LocalGtfsStore {
     };
   }
 
-  /// Every physical stop used by a specific route.
-  ///
-  /// Used by the transfer planner to find nearby interchanges between
-  /// Route A and Route B.
   Future<List<GtfsStop>> routeStops({
     required String operatorId,
     required String routeId,
@@ -108,7 +104,6 @@ extension LocalGtfsJourneyStore on LocalGtfsStore {
     return rows.map(GtfsStop.fromMap).toList();
   }
 
-  /// Ordered route shape for a particular trip.
   Future<List<GtfsStop>> tripShape(
     String operatorId,
     String tripId,
@@ -194,10 +189,6 @@ extension LocalGtfsJourneyStore on LocalGtfsStore {
     return shape.sublist(fromIndex, toIndex + 1);
   }
 
-  // ==============================================================
-  // CROWDING
-  // ==============================================================
-
   Future<Map<int, int>> hourlyDensity(
     String operatorId,
     String stopId,
@@ -230,9 +221,4 @@ extension LocalGtfsJourneyStore on LocalGtfsStore {
         (row['hour'] as num).toInt(): (row['n'] as num).toInt(),
     };
   }
-
-  // ==============================================================
-  // CLEAR CACHE
-  // ==============================================================
-
 }

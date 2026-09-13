@@ -145,7 +145,6 @@ class GtfsStopTime {
   }
 }
 
-/// One row from GTFS calendar.txt.
 class GtfsCalendarService {
   const GtfsCalendarService({
     required this.operatorId,
@@ -192,7 +191,6 @@ class GtfsCalendarService {
   }
 }
 
-/// One row from GTFS calendar_dates.txt.
 class GtfsCalendarDate {
   const GtfsCalendarDate({
     required this.operatorId,
@@ -204,11 +202,8 @@ class GtfsCalendarDate {
   final String operatorId;
   final String serviceId;
 
-  /// YYYYMMDD integer.
   final int date;
 
-  /// 1 = added service.
-  /// 2 = removed service.
   final int exceptionType;
 
   Map<String, Object?> toMap() {
@@ -221,7 +216,6 @@ class GtfsCalendarDate {
   }
 }
 
-/// GTFS frequency-based service.
 class GtfsFrequency {
   const GtfsFrequency({
     required this.operatorId,
@@ -250,5 +244,3 @@ class GtfsFrequency {
     };
   }
 }
-
-/// Upcoming departure shown in Stop Detail and Journey Planner.

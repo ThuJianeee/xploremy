@@ -87,10 +87,6 @@ extension LocalGtfsCalendarStore on LocalGtfsStore {
       }
     }
 
-    /// Some feeds do not supply calendar.txt and rely only on trips.
-    ///
-    /// In that case allow all known service IDs so offline demo data
-    /// continues to function.
     if (services.isEmpty) {
       final calendarCount = Sqflite.firstIntValue(
             await db.rawQuery(
@@ -153,9 +149,4 @@ extension LocalGtfsCalendarStore on LocalGtfsStore {
 
     return services;
   }
-
-  // ==============================================================
-  // DEPARTURES
-  // ==============================================================
-
 }

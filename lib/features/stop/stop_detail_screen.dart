@@ -16,8 +16,6 @@ import '../auth/auth_service.dart';
 
 part 'widgets/departure_tile.dart';
 
-/// Stop details with calendar/frequency-aware departures and live vehicle
-/// positions where the official data.gov.my feed supports them.
 class StopDetailScreen extends StatefulWidget {
   const StopDetailScreen({super.key, required this.stop});
 
@@ -34,7 +32,7 @@ class _StopDetailScreenState extends State<StopDetailScreen> {
   bool _loading = true;
   bool _isFavourite = false;
   DateTime? _updatedAt;
-  CrowdLevel? _crowd;
+  ServiceActivityLevel? _activity;
   String? _error;
   bool _refreshing = false;
   Timer? _ticker;
@@ -81,7 +79,7 @@ class _StopDetailScreenState extends State<StopDetailScreen> {
               departures.first.tripId,
             );
       final vehicles = await repo.liveVehicles(widget.stop.operatorId);
-      final crowd = await repo.crowdLevel(
+      final activity = await repo.serviceActivityLevel(
         widget.stop.operatorId,
         widget.stop.stopId,
       );
@@ -103,7 +101,7 @@ class _StopDetailScreenState extends State<StopDetailScreen> {
         _departures = departures;
         _shape = shape;
         _vehicles = vehicles;
-        _crowd = crowd;
+        _activity = activity;
         _isFavourite = favourite;
         _updatedAt = DateTime.now();
         _error = null;
@@ -134,10 +132,12 @@ class _StopDetailScreenState extends State<StopDetailScreen> {
         );
       }
       if (mounted) setState(() => _isFavourite = !_isFavourite);
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not save: $e')),
+          const SnackBar(
+            content: Text('Could not update favourite. Please try again.'),
+          ),
         );
       }
     }
@@ -254,10 +254,10 @@ class _StopDetailScreenState extends State<StopDetailScreen> {
                       : 'Scheduled data only',
                   color: op.hasRealtime ? AppTheme.signalTeal : AppTheme.slate,
                 ),
-                if (_crowd != null)
+                if (_activity != null)
                   _pill(
-                    icon: Icons.groups_2_outlined,
-                    label: 'Typical crowd: ${_crowd!.label}',
+                    icon: Icons.insights_outlined,
+                    label: 'Service activity: ${_activity!.label}',
                     color: AppTheme.delayed,
                   ),
               ],
@@ -266,7 +266,7 @@ class _StopDetailScreenState extends State<StopDetailScreen> {
             Text(
               op.hasRealtime
                   ? 'Live markers use the official vehicle-position feed. Departure times remain scheduled because the public API does not currently provide TripUpdates.'
-                  : 'This operator does not currently have a stable public realtime vehicle feed, so departures are shown from the official schedule.',
+                  : 'Realtime vehicle markers are not enabled for this operator in XploreMY, so departures are shown from the official schedule.',
               style: const TextStyle(
                 fontSize: 11.5,
                 height: 1.35,
@@ -314,49 +314,70 @@ class _StopDetailScreenState extends State<StopDetailScreen> {
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
-      child: FlutterMap(
-        options: MapOptions(initialCenter: centre, initialZoom: 14),
+      child: Stack(
         children: [
-          TileLayer(
-            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            userAgentPackageName: 'com.example.xploremy',
-          ),
-          if (line.length > 1)
-            PolylineLayer(
-              polylines: [
-                Polyline(
-                  points: line,
-                  strokeWidth: 4,
-                  color: AppTheme.trackNavy.withValues(alpha: 0.7),
-                ),
-              ],
-            ),
-          MarkerLayer(
-            markers: [
-              Marker(
-                point: centre,
-                width: 40,
-                height: 40,
-                child: const Icon(
-                  Icons.location_on,
-                  color: AppTheme.hibiscus,
-                  size: 36,
-                ),
+          FlutterMap(
+            options: MapOptions(initialCenter: centre, initialZoom: 14),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.xploremy.app',
               ),
-              for (final v in _vehicles.take(80))
-                Marker(
-                  point: LatLng(v.lat, v.lon),
-                  width: 18,
-                  height: 18,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: AppTheme.signalTeal,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
+              if (line.length > 1)
+                PolylineLayer(
+                  polylines: [
+                    Polyline(
+                      points: line,
+                      strokeWidth: 4,
+                      color: AppTheme.trackNavy.withValues(alpha: 0.7),
+                    ),
+                  ],
+                ),
+              MarkerLayer(
+                markers: [
+                  Marker(
+                    point: centre,
+                    width: 40,
+                    height: 40,
+                    child: const Icon(
+                      Icons.location_on,
+                      color: AppTheme.hibiscus,
+                      size: 36,
                     ),
                   ),
-                ),
+                  for (final v in _vehicles.take(80))
+                    Marker(
+                      point: LatLng(v.lat, v.lon),
+                      width: 18,
+                      height: 18,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: AppTheme.signalTeal,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ],
+          ),
+          Positioned(
+            right: 6,
+            bottom: 6,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.88),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                child: Text(
+                  '© OpenStreetMap contributors',
+                  style: TextStyle(fontSize: 9, color: Colors.black87),
+                ),
+              ),
+            ),
           ),
         ],
       ),

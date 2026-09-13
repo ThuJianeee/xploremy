@@ -66,7 +66,7 @@ class _PlannerStopPickerState extends State<_PlannerStopPicker> {
       setState(() {
         _results = result;
       });
-    } catch (e) {
+    } catch (_) {
       if (!mounted || requestId != _requestId) {
         return;
       }
@@ -76,9 +76,9 @@ class _PlannerStopPickerState extends State<_PlannerStopPicker> {
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text(
-            'Could not search stops: $e',
+            'Could not search stops. Please try again.',
           ),
         ),
       );
@@ -294,7 +294,3 @@ class _PlannerStopPickerState extends State<_PlannerStopPicker> {
     }
   }
 }
-
-// ==================================================================
-// PLANNER INFORMATION
-// ==================================================================

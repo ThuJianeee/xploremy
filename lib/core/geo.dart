@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 
-/// Great-circle distance in metres between two WGS84 points.
 double haversineMetres(double lat1, double lon1, double lat2, double lon2) {
   const earthRadius = 6371000.0;
   final dLat = _rad(lat2 - lat1);
@@ -20,7 +19,6 @@ String formatDistance(double metres) {
   return '${(metres / 1000).toStringAsFixed(1)} km';
 }
 
-/// "HH:MM:SS" (GTFS allows hours >= 24) -> seconds after service-day midnight.
 int? parseGtfsTime(String value) {
   final parts = value.trim().split(':');
   if (parts.length != 3) return null;
@@ -57,8 +55,6 @@ String formatCountdown(int seconds) {
 String formatClockTime(DateTime time) =>
     '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
 
-/// Clearly labels next-day departures instead of silently wrapping a past
-/// schedule by +24 hours.
 String formatDepartureTime(DateTime scheduledAt, {DateTime? now}) {
   final reference = now ?? DateTime.now();
   final today = DateTime(reference.year, reference.month, reference.day);

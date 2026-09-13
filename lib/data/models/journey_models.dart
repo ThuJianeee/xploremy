@@ -18,7 +18,6 @@ class PlannerStopOption {
   final String routeLongName;
   final int routeType;
 
-  /// A station can have multiple physical GTFS stop/platform records.
   final List<GtfsStop> stops;
 
   GtfsStop get primaryStop => stops.first;
@@ -40,15 +39,6 @@ class PlannerStopOption {
   }
 }
 
-/// One transit leg.
-///
-/// A direct journey contains one JourneyLeg.
-///
-/// A standard one-transfer journey contains:
-///
-/// JourneyLeg A
-/// -> JourneyTransfer
-/// -> JourneyLeg B
 class JourneyLeg {
   const JourneyLeg({
     required this.fromStop,
@@ -82,7 +72,6 @@ class JourneyLeg {
   final int stopCount;
   final int routeType;
 
-  /// Ordered physical stops for this leg, including origin and destination.
   final List<GtfsStop> stops;
 
   JourneyLeg copyWithStops(List<GtfsStop> value) {
@@ -108,14 +97,6 @@ class JourneyLeg {
   }
 }
 
-/// Walking / interchange connection between two transit stops.
-///
-/// This can represent:
-///
-/// - changing platform,
-/// - changing rail line,
-/// - walking between nearby stations,
-/// - changing operator.
 class JourneyTransfer {
   const JourneyTransfer({
     required this.fromStop,
@@ -135,17 +116,6 @@ class JourneyTransfer {
   }
 }
 
-/// Complete planned journey.
-///
-/// Direct:
-///
-/// [leg]
-///
-/// One transfer:
-///
-/// [leg A] -> transfer -> [leg B]
-///
-/// The planner also supports changing line at the origin or destination.
 class JourneyPlan {
   const JourneyPlan({
     required this.legs,
@@ -156,15 +126,10 @@ class JourneyPlan {
 
   final List<JourneyLeg> legs;
 
-  /// Example:
-  /// User selected KL Sentral Monorail but journey starts from
-  /// KL Sentral Kelana Jaya Line.
   final JourneyTransfer? beforeFirstLeg;
 
-  /// Normal interchange between leg 1 and leg 2.
   final JourneyTransfer? betweenLegs;
 
-  /// Transfer/walk after the last transit leg.
   final JourneyTransfer? afterLastLeg;
 
   GtfsStop get fromStop => legs.first.fromStop;

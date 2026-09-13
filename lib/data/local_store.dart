@@ -13,15 +13,6 @@ part 'store/local_store_departures.dart';
 part 'store/local_store_journey.dart';
 part 'store/local_store_cache.dart';
 
-/// Offline GTFS cache.
-///
-/// Version 2 adds:
-/// - calendar.txt
-/// - calendar_dates.txt
-/// - frequencies.txt
-///
-/// This allows the app to determine the correct service day and calculate
-/// real scheduled departures instead of treating all timetable rows as daily.
 class LocalGtfsStore {
   Database? _db;
 
@@ -49,8 +40,6 @@ class LocalGtfsStore {
         if (oldVersion < 2) {
           await _createV2Tables(db);
 
-          /// Existing V1 feed rows do not have trustworthy calendar data.
-          /// Force users to re-download the official GTFS feed.
           for (final table in [
             'stops',
             'routes',
@@ -285,9 +274,4 @@ class LocalGtfsStore {
 
     await batch.commit(noResult: true);
   }
-
-  // ==============================================================
-  // FEED META
-  // ==============================================================
-
 }

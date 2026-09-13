@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 
-/// Tracks unsaved profile edits so navigation can protect the user's changes.
 class ProfileEditController extends ChangeNotifier {
   bool _isDirty = false;
   VoidCallback? _discardCallback;

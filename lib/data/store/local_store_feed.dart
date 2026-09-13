@@ -41,10 +41,6 @@ extension LocalGtfsFeedStore on LocalGtfsStore {
         .toList();
   }
 
-  // ==============================================================
-  // SAVE FEED
-  // ==============================================================
-
   Future<void> saveFeed(
     GtfsStaticFeed feed,
   ) async {
@@ -161,9 +157,4 @@ extension LocalGtfsFeedStore on LocalGtfsStore {
       },
     );
   }
-
-  // ==============================================================
-  // NEARBY STOPS
-  // ==============================================================
-
 }

@@ -254,11 +254,6 @@ extension LocalGtfsPlannerStore on LocalGtfsStore {
 
     return options.take(limit).toList();
   }
-
-  // ==============================================================
-  // SERVICE CALENDAR
-  // ==============================================================
-
 }
 
 class _PlannerGroup {

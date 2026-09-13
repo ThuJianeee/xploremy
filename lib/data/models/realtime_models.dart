@@ -17,7 +17,6 @@ class Departure {
 
   final String operatorId;
 
-  /// Optional default keeps older code compatible.
   final String routeId;
 
   final String tripId;
@@ -30,9 +29,6 @@ class Departure {
   final int secondsUntil;
   final int routeType;
 
-  /// Positive = delayed.
-  /// Negative = early.
-  /// Null = scheduled data only.
   final int? liveDelaySeconds;
 
   bool get hasLive => liveDelaySeconds != null;
@@ -63,7 +59,6 @@ enum Reliability {
   early,
 }
 
-/// GTFS realtime vehicle position.
 class VehiclePosition {
   const VehiclePosition({
     required this.operatorId,
@@ -88,32 +83,18 @@ class VehiclePosition {
   final DateTime? timestamp;
 }
 
-enum CrowdLevel {
-  quiet,
+enum ServiceActivityLevel {
+  low,
   moderate,
-  busy,
+  high,
 }
 
-extension CrowdLevelLabel on CrowdLevel {
+extension ServiceActivityLevelLabel on ServiceActivityLevel {
   String get label {
     return switch (this) {
-      CrowdLevel.quiet => 'Usually quiet',
-      CrowdLevel.moderate => 'Moderate',
-      CrowdLevel.busy => 'Usually crowded',
+      ServiceActivityLevel.low => 'Low',
+      ServiceActivityLevel.moderate => 'Moderate',
+      ServiceActivityLevel.high => 'High',
     };
   }
 }
-
-/// One selectable station + route combination in Route Planner.
-///
-/// Example:
-///
-/// KL SENTRAL
-/// LRT Kelana Jaya Line
-///
-/// and:
-///
-/// KL SENTRAL
-/// KL Monorail Line
-///
-/// are separate PlannerStopOptions.

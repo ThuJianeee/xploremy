@@ -222,6 +222,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return;
     }
 
+    setState(() {
+      _error = null;
+    });
+
     try {
       await context.read<AuthService>().updatePassword(newPassword);
 
@@ -229,9 +233,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return;
       }
 
+      setState(() {
+        _error = null;
+      });
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Password is updated'),
+          content: Text('Password updated'),
         ),
       );
     } catch (e) {

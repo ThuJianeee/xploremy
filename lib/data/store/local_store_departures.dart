@@ -28,10 +28,6 @@ extension LocalGtfsDepartureStore on LocalGtfsStore {
 
     final candidates = <Map<String, Object?>>[];
 
-    // ------------------------------------------------------------
-    // Normal scheduled trips
-    // ------------------------------------------------------------
-
     final scheduledRows = await db.rawQuery(
       '''
       SELECT
@@ -99,10 +95,6 @@ extension LocalGtfsDepartureStore on LocalGtfsStore {
     candidates.addAll(
       scheduledRows,
     );
-
-    // ------------------------------------------------------------
-    // GTFS frequency trips
-    // ------------------------------------------------------------
 
     final frequencyRows = await db.rawQuery(
       '''
@@ -261,11 +253,4 @@ extension LocalGtfsDepartureStore on LocalGtfsStore {
 
     return result;
   }
-
-  // ==============================================================
-  // JOURNEY PLANNER HELPERS
-  // ==============================================================
-
-  /// Finds the stop positions and schedule times for two stops
-  /// on exactly the same trip.
 }

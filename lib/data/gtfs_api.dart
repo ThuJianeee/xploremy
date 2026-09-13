@@ -11,16 +11,14 @@ import '../core/config.dart';
 import '../core/geo.dart';
 import 'models.dart';
 
-/// Data/API layer for Malaysia's official data.gov.my GTFS endpoints.
 class GtfsApi {
   GtfsApi({http.Client? client}) : _client = client ?? http.Client();
 
   final http.Client _client;
 
   Future<GtfsStaticFeed> fetchStaticFeed(Operator op) async {
-    final response = await _client
-        .get(op.staticUrl)
-        .timeout(AppConfig.networkTimeout);
+    final response =
+        await _client.get(op.staticUrl).timeout(AppConfig.networkTimeout);
     if (response.statusCode != 200) {
       throw GtfsException(
         'GTFS-static request for ${op.shortName} failed '
@@ -30,9 +28,6 @@ class GtfsApi {
     return parseStaticArchive(op, response.bodyBytes);
   }
 
-  /// Parses the files needed for correct service-day and frequency-aware
-  /// departures. Rapid Rail relies heavily on frequencies.txt, so ignoring it
-  /// produces the old 06:00/06:26-only timetable bug.
   GtfsStaticFeed parseStaticArchive(Operator op, Uint8List bytes) {
     final archive = ZipDecoder().decodeBytes(bytes);
 
@@ -62,15 +57,11 @@ class GtfsApi {
     );
   }
 
-  /// data.gov.my currently exposes GTFS-RT vehicle positions. The official
-  /// feed is refreshed every ~30 seconds for supported operators.
   Future<List<VehiclePosition>> fetchVehiclePositions(Operator op) async {
     final url = op.realtimeUrl;
     if (url == null) return const [];
 
-    final response = await _client
-        .get(url)
-        .timeout(AppConfig.networkTimeout);
+    final response = await _client.get(url).timeout(AppConfig.networkTimeout);
     if (response.statusCode != 200) {
       throw GtfsException(
         'GTFS-realtime request for ${op.shortName} failed '
@@ -87,9 +78,8 @@ class GtfsApi {
       result.add(
         VehiclePosition(
           operatorId: op.id,
-          vehicleId: v.hasVehicle() && v.vehicle.hasId()
-              ? v.vehicle.id
-              : entity.id,
+          vehicleId:
+              v.hasVehicle() && v.vehicle.hasId() ? v.vehicle.id : entity.id,
           lat: v.position.latitude.toDouble(),
           lon: v.position.longitude.toDouble(),
           tripId: v.hasTrip() && v.trip.hasTripId() ? v.trip.tripId : null,

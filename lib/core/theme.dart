@@ -1,10 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// XploreMY design system.
-///
-/// Palette is drawn from Malaysian transit line colours: a deep "track" navy,
-/// a hibiscus red accent and a warm sand background. Everything else in the
-/// app reads from this theme — no ad-hoc colours in widgets.
 class AppTheme {
   static const Color trackNavy = Color(0xFF0B2545);
   static const Color signalTeal = Color(0xFF00857C);
@@ -101,6 +96,7 @@ class AppTheme {
       ),
     );
   }
+
   static ThemeData get dark {
     final scheme = ColorScheme.fromSeed(
       seedColor: signalTeal,
@@ -163,5 +159,4 @@ class AppTheme {
       ),
     );
   }
-
 }
