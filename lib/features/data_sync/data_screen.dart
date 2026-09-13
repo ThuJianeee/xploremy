@@ -7,7 +7,6 @@ import '../../core/theme.dart';
 import '../../data/transit_repository.dart';
 import '../../widgets/status_banner.dart';
 
-/// Offline data manager — downloads and caches GTFS-static feeds.
 class DataScreen extends StatefulWidget {
   const DataScreen({super.key});
 
@@ -43,9 +42,8 @@ class _DataScreenState extends State<DataScreen> {
     });
 
     try {
-      final result = await context
-          .read<TransitRepository>()
-          .syncOperator(op, force: true);
+      final result =
+          await context.read<TransitRepository>().syncOperator(op, force: true);
       _message = '${op.shortName}: ${result.stops} stops cached.';
     } catch (_) {
       _message =
@@ -64,12 +62,12 @@ class _DataScreenState extends State<DataScreen> {
     });
 
     final results = await context.read<TransitRepository>().syncAll(
-          Operators.all,
-          force: true,
-          onProgress: (op) {
-            if (mounted) setState(() => _busyOperator = op.id);
-          },
-        );
+      Operators.all,
+      force: true,
+      onProgress: (op) {
+        if (mounted) setState(() => _busyOperator = op.id);
+      },
+    );
 
     final ok = results.where((result) => result.ok).length;
     await _refreshMeta();
@@ -183,7 +181,8 @@ class _DataScreenState extends State<DataScreen> {
                 child: _OperatorDataCard(
                   operator: op,
                   lastSync: _lastSync[op.id],
-                  stale: _lastSync[op.id] != null && _isStale(_lastSync[op.id]!),
+                  stale:
+                      _lastSync[op.id] != null && _isStale(_lastSync[op.id]!),
                   formatter: formatter,
                   busy: _busyOperator == op.id,
                   disabled: busy,
@@ -229,14 +228,16 @@ class _OperatorDataCard extends StatelessWidget {
         ? 'Updated ${formatter.format(lastSync!)}${stale ? ' · update recommended' : ''}'
         : 'Not downloaded';
     final realtime = operator.hasRealtime
-        ? 'Live vehicle positions supported'
+        ? 'Live vehicle positions enabled'
         : 'Scheduled timetable only';
 
     return Card(
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         leading: Icon(
-          operator.isRail ? Icons.train_outlined : Icons.directions_bus_outlined,
+          operator.isRail
+              ? Icons.train_outlined
+              : Icons.directions_bus_outlined,
           color: AppTheme.trackNavy,
         ),
         title: Text(

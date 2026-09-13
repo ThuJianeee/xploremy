@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../core/theme.dart';
 
-/// XploreMY wordmark used on the auth screens.
 class BrandHeader extends StatelessWidget {
   const BrandHeader({super.key, required this.tagline});
 

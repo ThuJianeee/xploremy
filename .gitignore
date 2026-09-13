@@ -1,16 +1,12 @@
-# Flutter / Dart generated files
 .dart_tool/
 .packages
 .pub/
 build/
-pubspec.lock
 
-# IDE files
 .idea/
 .vscode/
 *.iml
 
-# Native build and signing artifacts
 android/.gradle/
 android/local.properties
 android/key.properties
@@ -22,13 +18,11 @@ ios/Flutter/ephemeral/
 ios/Flutter/Generated.xcconfig
 ios/Flutter/flutter_export_environment.sh
 
-# Local databases and environment files
 *.db
 *.sqlite
 .env
 .env.*
 
-# OS files
 .DS_Store
 Thumbs.db
 .flutter-plugins-dependencies

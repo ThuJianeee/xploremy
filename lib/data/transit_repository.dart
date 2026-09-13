@@ -2,7 +2,6 @@ import '../core/config.dart';
 import '../core/geo.dart';
 import 'gtfs_api.dart';
 import 'local_store.dart';
-import 'mock_feed.dart';
 import 'models.dart';
 
 part 'repository/transit_sync_repository.dart';
@@ -12,17 +11,6 @@ part 'repository/transit_direct_planner.dart';
 part 'repository/transit_transfer_planner.dart';
 part 'repository/transit_repository_models.dart';
 
-/// Main transport data facade.
-///
-/// Handles:
-/// - official GTFS static data
-/// - SQLite offline cache
-/// - nearby stops
-/// - scheduled departures
-/// - realtime vehicle positions
-/// - crowd heuristic
-/// - direct route planning
-/// - one-transfer / multi-modal route planning
 class TransitRepository {
   TransitRepository({
     GtfsApi? api,
@@ -38,9 +26,4 @@ class TransitRepository {
   final Map<String, DateTime> _vehicleFetchedAt = {};
 
   LocalGtfsStore get store => _store;
-
-  // ==============================================================
-  // SYNC
-  // ==============================================================
-
 }

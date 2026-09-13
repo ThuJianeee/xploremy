@@ -111,10 +111,6 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
-// ==================================================================
-// NO RESULT
-// ==================================================================
-
 class _NoJourney extends StatelessWidget {
   const _NoJourney({
     required this.from,
@@ -179,7 +175,3 @@ class _NoJourney extends StatelessWidget {
     );
   }
 }
-
-// ==================================================================
-// JOURNEY RESULT CARD
-// ==================================================================

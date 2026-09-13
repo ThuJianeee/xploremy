@@ -15,9 +15,9 @@ import '../stop/stop_detail_screen.dart';
 import 'widgets/stop_card.dart';
 
 enum _StopTypeFilter { all, rail, bus }
+
 enum _StopSort { distance, name, operator }
 
-/// MODULE 2 — Home / Nearby stops.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -151,7 +151,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           IconButton(
             tooltip: _mapView ? 'List view' : 'Map view',
-            icon: Icon(_mapView ? Icons.view_list_outlined : Icons.map_outlined),
+            icon:
+                Icon(_mapView ? Icons.view_list_outlined : Icons.map_outlined),
             onPressed: () => setState(() => _mapView = !_mapView),
           ),
           IconButton(
@@ -321,42 +322,63 @@ class _HomeScreenState extends State<HomeScreen> {
     if (location == null) return _emptyState();
 
     final centre = LatLng(location.lat, location.lon);
-    return FlutterMap(
-      options: MapOptions(initialCenter: centre, initialZoom: 14.5),
+    return Stack(
       children: [
-        TileLayer(
-          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          userAgentPackageName: 'com.example.xploremy',
-        ),
-        MarkerLayer(
-          markers: [
-            Marker(
-              point: centre,
-              width: 24,
-              height: 24,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppTheme.signalTeal,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 3),
-                ),
-              ),
+        FlutterMap(
+          options: MapOptions(initialCenter: centre, initialZoom: 14.5),
+          children: [
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.xploremy.app',
             ),
-            for (final stop in stops)
-              Marker(
-                point: LatLng(stop.lat, stop.lon),
-                width: 40,
-                height: 40,
-                child: GestureDetector(
-                  onTap: () => _openStop(stop),
-                  child: const Icon(
-                    Icons.location_on,
-                    color: AppTheme.hibiscus,
-                    size: 34,
+            MarkerLayer(
+              markers: [
+                Marker(
+                  point: centre,
+                  width: 24,
+                  height: 24,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: AppTheme.signalTeal,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 3),
+                    ),
                   ),
                 ),
-              ),
+                for (final stop in stops)
+                  Marker(
+                    point: LatLng(stop.lat, stop.lon),
+                    width: 40,
+                    height: 40,
+                    child: GestureDetector(
+                      onTap: () => _openStop(stop),
+                      child: const Icon(
+                        Icons.location_on,
+                        color: AppTheme.hibiscus,
+                        size: 34,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ],
+        ),
+        Positioned(
+          right: 6,
+          bottom: 6,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.88),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              child: Text(
+                '© OpenStreetMap contributors',
+                style: TextStyle(fontSize: 9, color: Colors.black87),
+              ),
+            ),
+          ),
         ),
       ],
     );

@@ -79,5 +79,4 @@ void main() {
 
     expect(await PlannerSavedStore.load(), hasLength(1));
   });
-
 }

@@ -23,10 +23,6 @@ extension TransitDirectPlanner on TransitRepository {
     );
   }
 
-  // ==============================================================
-  // DIRECT JOURNEY
-  // ==============================================================
-
   Future<List<JourneyPlan>> planDirectJourneys({
     required PlannerStopOption from,
     required PlannerStopOption to,
@@ -69,7 +65,8 @@ extension TransitDirectPlanner on TransitRepository {
     final seen = <String>{};
 
     for (final fromStop in from.stops) {
-      final departures = await TransitDepartureRepository(this).getDeparturesForStop(
+      final departures =
+          await TransitDepartureRepository(this).getDeparturesForStop(
         operatorId: fromStop.operatorId,
         stopId: fromStop.stopId,
         limit: 120,
@@ -191,9 +188,4 @@ extension TransitDirectPlanner on TransitRepository {
 
     return result;
   }
-
-  // ==============================================================
-  // ONE TRANSFER / MULTI-MODAL
-  // ==============================================================
-
 }

@@ -145,10 +145,6 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
     );
   }
 
-  // ==============================================================
-  // STATION SELECTION
-  // ==============================================================
-
   Future<void> _selectFrom() async {
     final result = await _openPicker(
       title: 'Select starting station',
@@ -199,10 +195,6 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
     );
   }
 
-  // ==============================================================
-  // CURRENT LOCATION
-  // ==============================================================
-
   Future<void> _useCurrentLocation() async {
     if (_locating) {
       return;
@@ -242,7 +234,6 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
 
       PlannerStopOption? option;
 
-      /// Try each nearby physical stop until one has route information.
       for (final stop in nearby) {
         final options = await repository.plannerOptionsForStop(
           operatorId: stop.operatorId,
@@ -290,15 +281,15 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
           content: Text(text),
         ),
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) {
         return;
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text(
-            'Could not get current location: $e',
+            'Could not get your current location. Check location permission and try again.',
           ),
         ),
       );
@@ -311,10 +302,6 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
     }
   }
 
-  // ==============================================================
-  // SWAP
-  // ==============================================================
-
   void _swap() {
     setState(() {
       final previous = _from;
@@ -326,10 +313,6 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
       _searched = false;
     });
   }
-
-  // ==============================================================
-  // PLAN JOURNEY
-  // ==============================================================
 
   Future<void> _plan() async {
     final from = _from;
@@ -363,9 +346,6 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
 
     final repository = context.read<TransitRepository>();
 
-    // A recent journey represents a route-planning attempt, not only a
-    // successful result. Saving it before the query makes the history
-    // reliable even when the timetable has no suitable journey.
     final updatedRecent = await PlannerHistoryStore.add(
       PlannerHistoryEntry.fromOptions(from: from, to: to),
     );
@@ -379,10 +359,6 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
     });
 
     try {
-      /// IMPORTANT:
-      ///
-      /// planJourneys first tries direct route.
-      /// If none exists, it tries one-transfer / multi-modal route.
       final journeys = await repository.planJourneys(
         from: from,
         to: to,
@@ -396,15 +372,15 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
       setState(() {
         _journeys = journeys;
       });
-    } catch (e) {
+    } catch (_) {
       if (!mounted) {
         return;
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text(
-            'Could not plan journey: $e',
+            'Could not plan this journey. Please try again.',
           ),
         ),
       );
@@ -416,10 +392,6 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
       }
     }
   }
-
-  // ==============================================================
-  // UI
-  // ==============================================================
 
   @override
   Widget build(BuildContext context) {
@@ -546,7 +518,3 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
     );
   }
 }
-
-// ==================================================================
-// SELECTED STATION FIELD
-// ==================================================================

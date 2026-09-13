@@ -41,8 +41,7 @@ class _AppShellState extends State<AppShell> {
   Future<void> _selectDestination(int nextIndex) async {
     if (nextIndex == _index) return;
 
-    final leavingDirtyProfile =
-        _index == _profileIndex &&
+    final leavingDirtyProfile = _index == _profileIndex &&
         nextIndex != _profileIndex &&
         _profileEditController.isDirty;
 

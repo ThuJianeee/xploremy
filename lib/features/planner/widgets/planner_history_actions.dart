@@ -56,5 +56,4 @@ extension _PlannerHistoryActions on _RoutePlannerScreenState {
       _replaceSavedJourneys(updated);
     }
   }
-
 }

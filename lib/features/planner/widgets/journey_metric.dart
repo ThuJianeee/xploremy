@@ -45,10 +45,6 @@ class _JourneyMetric extends StatelessWidget {
   }
 }
 
-// ==================================================================
-// DISPLAY HELPERS
-// ==================================================================
-
 String _formatJourneyTime(
   DateTime value,
 ) {

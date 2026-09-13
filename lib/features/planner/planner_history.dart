@@ -56,7 +56,8 @@ class PlannerHistoryEntry {
       toName: map['toName'] as String? ?? '',
       toOperatorId: map['toOperatorId'] as String? ?? '',
       toRouteId: map['toRouteId'] as String? ?? '',
-      usedAt: DateTime.tryParse(map['usedAt'] as String? ?? '') ?? DateTime.now(),
+      usedAt:
+          DateTime.tryParse(map['usedAt'] as String? ?? '') ?? DateTime.now(),
     );
   }
 

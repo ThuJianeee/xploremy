@@ -50,5 +50,4 @@ extension TransitStopRepository on TransitRepository {
       stopId,
     );
   }
-
 }

@@ -65,7 +65,9 @@ class _PlannerInputCard extends StatelessWidget {
                       )
                     : const Icon(Icons.my_location),
                 label: Text(
-                  locating ? 'Finding nearest station...' : 'Use current location',
+                  locating
+                      ? 'Finding nearest station...'
+                      : 'Use current location',
                 ),
               ),
             ),

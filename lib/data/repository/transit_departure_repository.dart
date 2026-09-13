@@ -11,16 +11,10 @@ extension TransitDepartureRepository on TransitRepository {
     );
   }
 
-  // ==============================================================
-  // DEPARTURES
-  // ==============================================================
-
   Future<List<Departure>> getDeparturesForStop({
     required String operatorId,
     required String stopId,
     int limit = 12,
-
-    /// Route planner can ask for departures after a future transfer time.
     DateTime? after,
   }) async {
     final reference = after ?? DateTime.now();
@@ -41,12 +35,6 @@ extension TransitDepartureRepository on TransitRepository {
         reference.hour * 3600 + reference.minute * 60 + reference.second;
 
     final candidates = <_ServiceDepartureRow>[];
-
-    // ------------------------------------------------------------
-    // Previous GTFS service day.
-    //
-    // Needed for GTFS values such as 24:30 or 25:10.
-    // ------------------------------------------------------------
 
     final previousRows = await _store.rawDepartures(
       operatorId: operatorId,
@@ -78,10 +66,6 @@ extension TransitDepartureRepository on TransitRepository {
       }
     }
 
-    // ------------------------------------------------------------
-    // Current service day
-    // ------------------------------------------------------------
-
     final todayRows = await _store.rawDepartures(
       operatorId: operatorId,
       stopId: stopId,
@@ -111,10 +95,6 @@ extension TransitDepartureRepository on TransitRepository {
         );
       }
     }
-
-    // ------------------------------------------------------------
-    // Tomorrow
-    // ------------------------------------------------------------
 
     if (candidates.length < limit) {
       final tomorrowRows = await _store.rawDepartures(
@@ -150,10 +130,6 @@ extension TransitDepartureRepository on TransitRepository {
       ),
     );
 
-    /// Realtime matching only makes sense if this query is approximately now.
-    ///
-    /// It should not attempt to use a current vehicle location when calculating
-    /// a future second leg after a transfer.
     final isNearNow = reference.difference(actualNow).inSeconds.abs() <= 300;
 
     final vehicles = isNearNow
@@ -293,10 +269,6 @@ extension TransitDepartureRepository on TransitRepository {
     }
   }
 
-  // ==============================================================
-  // REALTIME / RELIABILITY
-  // ==============================================================
-
   Future<int?> _estimateDelaySeconds({
     required String operatorId,
     required String tripId,
@@ -353,8 +325,6 @@ extension TransitDepartureRepository on TransitRepository {
 
     final delay = now.difference(scheduledAt).inSeconds;
 
-    /// Avoid showing unrealistic delay calculations if the live vehicle cannot
-    /// be safely matched to the current timetable.
     if (delay.abs() > 7200) {
       return null;
     }
@@ -418,11 +388,7 @@ extension TransitDepartureRepository on TransitRepository {
     );
   }
 
-  // ==============================================================
-  // CROWDING
-  // ==============================================================
-
-  Future<CrowdLevel> crowdLevel(
+  Future<ServiceActivityLevel> serviceActivityLevel(
     String operatorId,
     String stopId,
   ) async {
@@ -432,7 +398,7 @@ extension TransitDepartureRepository on TransitRepository {
     );
 
     if (density.isEmpty) {
-      return CrowdLevel.quiet;
+      return ServiceActivityLevel.low;
     }
 
     final peak = density.values.reduce(
@@ -442,20 +408,20 @@ extension TransitDepartureRepository on TransitRepository {
     final current = density[DateTime.now().hour] ?? 0;
 
     if (peak == 0) {
-      return CrowdLevel.quiet;
+      return ServiceActivityLevel.low;
     }
 
     final ratio = current / peak;
 
     if (ratio >= 0.75) {
-      return CrowdLevel.busy;
+      return ServiceActivityLevel.high;
     }
 
     if (ratio >= 0.4) {
-      return CrowdLevel.moderate;
+      return ServiceActivityLevel.moderate;
     }
 
-    return CrowdLevel.quiet;
+    return ServiceActivityLevel.low;
   }
 
   Future<List<String>> operatorsNear(
@@ -475,12 +441,4 @@ extension TransitDepartureRepository on TransitRepository {
         .toSet()
         .toList();
   }
-
-  // ==============================================================
-  // JOURNEY PLANNER - PUBLIC ENTRY
-  // ==============================================================
-
-  /// First tries a direct route.
-  ///
-  /// If there is no direct journey, attempts one transfer / multi-modal route.
 }

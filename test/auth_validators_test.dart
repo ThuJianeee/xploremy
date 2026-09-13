@@ -93,4 +93,24 @@ void main() {
       );
     });
   });
+
+  group('AuthValidators friendly errors', () {
+    test('formats same-password error', () {
+      expect(
+        AuthValidators.friendlyError(
+          Exception('same_password: New password should be different'),
+        ),
+        'Your new password must be different from your current password.',
+      );
+    });
+
+    test('formats email rate-limit error', () {
+      expect(
+        AuthValidators.friendlyError(
+          Exception('over_email_send_rate_limit: email rate limit exceeded'),
+        ),
+        'Too many emails have been requested. Please wait a while and try again.',
+      );
+    });
+  });
 }
