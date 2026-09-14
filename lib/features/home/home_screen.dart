@@ -364,6 +364,23 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         Positioned(
+          left: 6,
+          bottom: 6,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.90),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+              child: Text(
+                '● You   📍 Stop',
+                style: TextStyle(fontSize: 9.5, color: Colors.black87),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
           right: 6,
           bottom: 6,
           child: DecoratedBox(

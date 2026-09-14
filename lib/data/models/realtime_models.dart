@@ -98,3 +98,9 @@ extension ServiceActivityLevelLabel on ServiceActivityLevel {
     };
   }
 }
+
+class ServiceSpan {
+  const ServiceSpan({required this.firstAt, required this.lastAt});
+  final DateTime firstAt;
+  final DateTime lastAt;
+}

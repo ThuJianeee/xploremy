@@ -6,6 +6,7 @@ import '../../core/config.dart';
 import '../../core/theme.dart';
 import '../../data/transit_repository.dart';
 import '../../widgets/status_banner.dart';
+import '../rewards/rewards_store.dart';
 
 class DataScreen extends StatefulWidget {
   const DataScreen({super.key});
@@ -45,6 +46,8 @@ class _DataScreenState extends State<DataScreen> {
       final result =
           await context.read<TransitRepository>().syncOperator(op, force: true);
       _message = '${op.shortName}: ${result.stops} stops cached.';
+      await RewardsStore.incrementMission('data_sync');
+      await RewardsStore.addXp(5);
     } catch (_) {
       _message =
           '${op.shortName} could not be updated. Existing cached data was kept.';
@@ -70,6 +73,10 @@ class _DataScreenState extends State<DataScreen> {
     );
 
     final ok = results.where((result) => result.ok).length;
+    if (ok > 0) {
+      await RewardsStore.incrementMission('data_sync');
+      await RewardsStore.addXp(5);
+    }
     await _refreshMeta();
 
     if (!mounted) return;
@@ -117,6 +124,35 @@ class _DataScreenState extends State<DataScreen> {
     return DateTime.now().difference(date) > AppConfig.staticFeedTtl;
   }
 
+
+  Widget _freshnessSummary() {
+    final downloaded = _lastSync.values.whereType<DateTime>().length;
+    final stale = _lastSync.values.whereType<DateTime>().where(_isStale).length;
+    final missing = Operators.all.length - downloaded;
+    final color = stale > 0 || missing > 0 ? AppTheme.delayed : AppTheme.onTime;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(Icons.health_and_safety_outlined, color: color),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Offline / Data Freshness', style: TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 4),
+                  Text('$downloaded/${Operators.all.length} operator feeds cached · $stale stale · $missing missing', style: const TextStyle(fontSize: 12.5, color: AppTheme.slate)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final formatter = DateFormat('d MMM, HH:mm');
@@ -139,6 +175,8 @@ class _DataScreenState extends State<DataScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 32),
           children: [
+            _freshnessSummary(),
+            const SizedBox(height: 12),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
