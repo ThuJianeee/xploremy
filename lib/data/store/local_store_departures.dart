@@ -254,3 +254,22 @@ extension LocalGtfsDepartureStore on LocalGtfsStore {
     return result;
   }
 }
+
+extension LocalGtfsServiceSpanStore on LocalGtfsStore {
+  Future<Map<String, int>?> serviceSpanForStop({
+    required String operatorId,
+    required String stopId,
+    required DateTime serviceDate,
+  }) async {
+    final rows = await LocalGtfsDepartureStore(this).rawDepartures(
+      operatorId: operatorId,
+      stopId: stopId,
+      serviceDate: serviceDate,
+      fromSeconds: 0,
+      limit: 5000,
+    );
+    if (rows.isEmpty) return null;
+    final values = rows.map((row) => (row['departure_seconds'] as num).toInt()).toList()..sort();
+    return {'first': values.first, 'last': values.last};
+  }
+}

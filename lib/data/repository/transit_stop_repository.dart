@@ -24,10 +24,12 @@ extension TransitStopRepository on TransitRepository {
   }
 
   Future<List<PlannerStopOption>> searchPlannerStops(
-    String query,
-  ) {
+    String query, {
+    int limit = 40,
+  }) {
     return _store.searchPlannerStops(
       query,
+      limit: limit,
     );
   }
 

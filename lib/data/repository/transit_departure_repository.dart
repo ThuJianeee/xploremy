@@ -442,3 +442,65 @@ extension TransitDepartureRepository on TransitRepository {
         .toList();
   }
 }
+
+extension TransitEnhancedDepartureRepository on TransitRepository {
+  DateTime? realtimeFetchedAt(String operatorId) => _vehicleFetchedAt[operatorId];
+
+  Future<ServiceSpan?> serviceSpanForStop({
+    required String operatorId,
+    required String stopId,
+    DateTime? date,
+  }) async {
+    final target = date ?? DateTime.now();
+    final day = DateTime(target.year, target.month, target.day);
+    final span = await LocalGtfsServiceSpanStore(_store).serviceSpanForStop(
+      operatorId: operatorId,
+      stopId: stopId,
+      serviceDate: day,
+    );
+    if (span == null) return null;
+    return ServiceSpan(
+      firstAt: day.add(Duration(seconds: span['first']!)),
+      lastAt: day.add(Duration(seconds: span['last']!)),
+    );
+  }
+
+  Future<List<VehiclePosition>> relevantVehicles({
+    required String operatorId,
+    String? tripId,
+    String? routeId,
+    GtfsStop? nearStop,
+    double maxDistanceMetres = 7000,
+  }) async {
+    final vehicles = await TransitDepartureRepository(this).liveVehicles(operatorId);
+    if (vehicles.isEmpty) return const [];
+
+    final cleanTrip = tripId?.trim();
+    if (cleanTrip != null && cleanTrip.isNotEmpty) {
+      final exactTrip = vehicles.where((vehicle) => vehicle.tripId == cleanTrip).toList();
+      if (exactTrip.isNotEmpty) return exactTrip;
+    }
+
+    final cleanRoute = routeId?.trim();
+    if (cleanRoute != null && cleanRoute.isNotEmpty) {
+      final sameRoute = vehicles.where((vehicle) => vehicle.routeId == cleanRoute).toList();
+      if (sameRoute.isNotEmpty) {
+        if (nearStop == null) return sameRoute;
+        final nearbyRoute = sameRoute.where((vehicle) {
+          return haversineMetres(vehicle.lat, vehicle.lon, nearStop.lat, nearStop.lon) <= maxDistanceMetres;
+        }).toList();
+        return nearbyRoute.isNotEmpty ? nearbyRoute : sameRoute.take(20).toList();
+      }
+    }
+
+    if (nearStop != null) {
+      final nearby = vehicles.where((vehicle) {
+        return haversineMetres(vehicle.lat, vehicle.lon, nearStop.lat, nearStop.lon) <= maxDistanceMetres;
+      }).toList();
+      if (nearby.isNotEmpty) return nearby;
+      return const [];
+    }
+
+    return vehicles.take(20).toList();
+  }
+}

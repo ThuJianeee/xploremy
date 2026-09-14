@@ -5,6 +5,8 @@ import '../../core/config.dart';
 import '../../core/location_service.dart';
 import '../../data/models.dart';
 import '../../data/transit_repository.dart';
+import '../rewards/rewards_store.dart';
+import '../settings/travel_preferences.dart';
 import 'planner_history.dart';
 import 'planner_saved.dart';
 
@@ -46,6 +48,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
   _JourneySort _sort = _JourneySort.recommended;
   List<PlannerHistoryEntry> _recent = const [];
   List<PlannerHistoryEntry> _saved = const [];
+  TravelPreferences _preferences = const TravelPreferences();
 
   void _applyRestoredJourney(
     PlannerStopOption from,
@@ -80,6 +83,9 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
     PlannerSavedStore.load().then((entries) {
       if (mounted) setState(() => _saved = entries);
     });
+    TravelPreferencesStore.load().then((value) {
+      if (mounted) setState(() => _preferences = value);
+    });
   }
 
   List<JourneyPlan> get _sortedJourneys {
@@ -100,6 +106,12 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
         journeys.sort((a, b) => _walkingMetres(a).compareTo(_walkingMetres(b)));
         break;
       case _JourneySort.recommended:
+        if (_preferences.preferFewerTransfers ||
+            _preferences.preferLessWalking ||
+            _preferences.preferRail ||
+            _preferences.accessibleMode) {
+          journeys.sort((a, b) => _preferenceScore(a).compareTo(_preferenceScore(b)));
+        }
         break;
     }
     return journeys;
@@ -109,6 +121,33 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
     return (journey.beforeFirstLeg?.distanceMetres ?? 0) +
         (journey.betweenLegs?.distanceMetres ?? 0) +
         (journey.afterLastLeg?.distanceMetres ?? 0);
+  }
+
+  int _preferenceScore(JourneyPlan journey) {
+    var score = journey.duration.inMinutes;
+    if (_preferences.preferFewerTransfers || _preferences.accessibleMode) {
+      score += journey.transferCount * 25;
+    }
+    if (_preferences.preferLessWalking || _preferences.accessibleMode) {
+      score += (_walkingMetres(journey) / 150).round();
+    }
+    if (_preferences.preferRail) {
+      final hasRail = journey.legs.any((leg) => leg.routeType == 0 || leg.routeType == 1 || leg.routeType == 2);
+      if (!hasRail) score += 18;
+    }
+    return score;
+  }
+
+  void _useHomeWork({required bool homeToWork}) {
+    final home = _preferences.home;
+    final work = _preferences.work;
+    if (home == null || work == null) return;
+    setState(() {
+      _from = homeToWork ? home : work;
+      _to = homeToWork ? work : home;
+      _journeys = const [];
+      _searched = false;
+    });
   }
 
   PlannerHistoryEntry? get _currentEntry {
@@ -349,6 +388,8 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
     final updatedRecent = await PlannerHistoryStore.add(
       PlannerHistoryEntry.fromOptions(from: from, to: to),
     );
+    await RewardsStore.incrementMission('journey_planned');
+    await RewardsStore.addXp(5);
 
     if (!mounted) return;
     setState(() {
@@ -422,6 +463,25 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
                   ),
             ),
             const SizedBox(height: 18),
+            if (_preferences.home != null && _preferences.work != null) ...[
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ActionChip(
+                    avatar: const Icon(Icons.home_outlined, size: 18),
+                    label: const Text('Home → Work'),
+                    onPressed: () => _useHomeWork(homeToWork: true),
+                  ),
+                  ActionChip(
+                    avatar: const Icon(Icons.work_outline, size: 18),
+                    label: const Text('Work → Home'),
+                    onPressed: () => _useHomeWork(homeToWork: false),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
             _PlannerInputCard(
               from: _from,
               to: _to,

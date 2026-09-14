@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data_sync/data_screen.dart';
 import '../home/home_screen.dart';
+import '../more/more_screen.dart';
 import '../planner/route_planner_screen.dart';
 import '../profile/profile_edit_controller.dart';
 import '../profile/profile_screen.dart';
@@ -29,6 +30,7 @@ class _AppShellState extends State<AppShell> {
       const RoutePlannerScreen(),
       const DataScreen(),
       ProfileScreen(editController: _profileEditController),
+      const MoreScreen(),
     ];
   }
 
@@ -104,6 +106,11 @@ class _AppShellState extends State<AppShell> {
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person),
             label: 'Profile',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.grid_view_outlined),
+            selectedIcon: Icon(Icons.grid_view),
+            label: 'More',
           ),
         ],
       ),

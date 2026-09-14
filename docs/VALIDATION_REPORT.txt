@@ -1,0 +1,66 @@
+XploreMY_Enhanced_Full - Validation Report
+==========================================
+Input archive SHA-256:
+  ebf07e13609d4ac523817fa7dceabc4eb363ac8a92bba34c1f1f05df98921f90
+
+Original-retention audit
+------------------------
+Original files inspected: 100
+Missing original files: 0
+Changed existing files: 11
+Added feature/test/docs files before this report: 12
+Unchanged original files: 89
+Result: PASS - every original file remains present.
+
+Added automated tests
+---------------------
+Existing test files: 7
+New test files: 3
+Total test files: 10
+New coverage includes rewards level/XP/streak/claim/mission behavior,
+Home/Work travel preference persistence, departure reliability, and service spans.
+
+Checks attempted
+----------------
+1. flutter --version
+   Result: NOT RUNNABLE - Flutter CLI is not installed in this execution environment.
+
+2. flutter pub get
+   Result: NOT RUNNABLE - Flutter CLI is not installed.
+
+3. flutter analyze
+   Result: NOT RUNNABLE - Flutter CLI is not installed.
+
+4. flutter test
+   Result: NOT RUNNABLE - Flutter CLI is not installed.
+
+5. Android Gradle wrapper (bash android/gradlew -p android tasks --offline)
+   Result: BLOCKED - wrapper attempted to obtain Gradle 9.1.0 from services.gradle.org,
+   but outbound network/DNS is unavailable in this execution environment.
+
+Checks completed
+----------------
+1. Dart source structural validation across 82 Dart source/test files:
+   - relative import/part targets exist
+   - (), [], {} delimiter balance checked outside comments/strings
+   Result: PASS
+
+2. Supabase SQL lexical validation:
+   - 11 RLS-enable statements
+   - policy definitions present for enhanced and existing user-owned tables
+   - balanced SQL parentheses and dollar-quote markers
+   Result: PASS
+
+3. Dependency impact:
+   - no new pub dependency is required; enhanced features use packages already in pubspec.yaml
+   Result: PASS
+
+Important limitation
+--------------------
+Because this container has no Flutter/Dart SDK and cannot download the Gradle distribution,
+this archive is source-structure validated but not Flutter-compiler/analyzer verified here.
+Run the following on a development machine with Flutter installed:
+  flutter pub get
+  flutter analyze
+  flutter test
+  flutter build apk --debug

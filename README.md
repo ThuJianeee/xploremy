@@ -119,3 +119,9 @@ Stop Detail -> Departures -> Favourite
 Planner -> Direct journey -> One-transfer journey -> Saved/recent journeys
 Theme -> Light/Dark/System
 ```
+
+## Enhanced Full build
+
+The Enhanced Full variant adds XploreRewards, route/departure filtering, future departure lookup, trip timelines, first/last service information, realtime vehicle filtering/details/freshness, map legends, Home/Work travel preferences, Alerts Centre, expanded offline freshness reporting, and an About/Data Sources screen while retaining the original app flow.
+
+See `docs/ENHANCED_FEATURES.md` for the feature map and `supabase/xploremy_enhanced.sql` for optional Supabase tables and RLS policies.
