@@ -92,3 +92,8 @@ Before submission on your own machine, run the full Flutter commands above and c
 ## Final v5 reward isolation fix
 
 XploreRewards XP, streaks, missions and claimed rewards are scoped by the authenticated Supabase user ID so accounts on the same device no longer share progress. Legacy device-wide reward keys are ignored.
+
+
+## Mission XP consistency
+
+XploreRewards now awards the XP shown on each mission exactly once when the mission target is reached. Legacy per-action journey/data-sync XP is migrated to the mission-completion model, and existing completed mission progress is normalized automatically. Rewards remain isolated by authenticated user ID.

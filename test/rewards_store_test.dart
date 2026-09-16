@@ -12,7 +12,11 @@ void main() {
 
   test('XP maps to level and progress', () {
     const snapshot = RewardsSnapshot(
-        xp: 750, streak: 3, lastActiveDate: null, claimedRewards: <String>{});
+      xp: 750,
+      streak: 3,
+      lastActiveDate: null,
+      claimedRewards: <String>{},
+    );
     expect(snapshot.level, 2);
     expect(snapshot.levelStartXp, 500);
     expect(snapshot.nextLevelXp, 1000);
@@ -34,6 +38,38 @@ void main() {
     expect(snapshot.streak, 3);
   });
 
+  test(
+    'mission reward XP is granted once when the target is reached',
+    () async {
+      await RewardsStore.incrementMission('journey_planned', by: 2);
+      expect((await RewardsStore.load()).xp, 0);
+
+      await RewardsStore.incrementMission('journey_planned');
+      expect((await RewardsStore.load()).xp, 60);
+
+      await RewardsStore.incrementMission('journey_planned');
+      expect((await RewardsStore.load()).xp, 60);
+    },
+  );
+
+  test('completed mission labels match total XP', () async {
+    await RewardsStore.checkIn();
+    await RewardsStore.incrementMission('stop_opened', by: 5);
+    await RewardsStore.incrementMission('data_sync', by: 3);
+    expect((await RewardsStore.load()).xp, 100);
+  });
+
+  test('legacy per-action XP is normalized to mission completion XP', () async {
+    SharedPreferences.setMockInitialValues({
+      'xplore_rewards_xp::user-a': 25,
+      'xplore_rewards_missions::user-a':
+          '{"daily_checkin":1,"stop_opened":5,"data_sync":3}',
+    });
+
+    final snapshot = await RewardsStore.load();
+    expect(snapshot.xp, 100);
+  });
+
   test('claim deducts XP once', () async {
     SharedPreferences.setMockInitialValues({'xplore_rewards_xp::user-a': 600});
     expect(await RewardsStore.claim('eco', 500), isTrue);
@@ -50,7 +86,7 @@ void main() {
 
   test('reward progress is isolated between accounts', () async {
     await RewardsStore.addXp(90);
-    await RewardsStore.incrementMission('journey_planned', by: 3);
+    await RewardsStore.incrementMission('journey_planned', by: 2);
 
     RewardsStore.setUserId('user-b');
     expect((await RewardsStore.load()).xp, 0);
@@ -61,7 +97,7 @@ void main() {
 
     RewardsStore.setUserId('user-a');
     expect((await RewardsStore.load()).xp, 90);
-    expect((await RewardsStore.missionProgress())['journey_planned'], 3);
+    expect((await RewardsStore.missionProgress())['journey_planned'], 2);
 
     RewardsStore.setUserId('user-b');
     expect((await RewardsStore.load()).xp, 15);

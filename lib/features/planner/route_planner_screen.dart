@@ -62,10 +62,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
   List<SavedAddressEntry> _savedAddresses = const [];
   TravelPreferences _preferences = const TravelPreferences();
 
-  void _applyRestoredJourney(
-    PlannerStopOption from,
-    PlannerStopOption to,
-  ) {
+  void _applyRestoredJourney(PlannerStopOption from, PlannerStopOption to) {
     setState(() {
       _from = from;
       _to = to;
@@ -163,7 +160,8 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
             _preferences.defaultTransport != DefaultTransport.any ||
             _preferences.accessibleMode) {
           journeys.sort(
-              (a, b) => _preferenceScore(a).compareTo(_preferenceScore(b)));
+            (a, b) => _preferenceScore(a).compareTo(_preferenceScore(b)),
+          );
         }
         break;
     }
@@ -229,10 +227,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
     });
   }
 
-  void _useSavedAddress(
-    SavedAddressEntry address, {
-    required bool asOrigin,
-  }) {
+  void _useSavedAddress(SavedAddressEntry address, {required bool asOrigin}) {
     setState(() {
       if (asOrigin) {
         _from = address.stop;
@@ -302,9 +297,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
   }
 
   Future<void> _selectFrom() async {
-    final result = await _openPicker(
-      title: 'Select starting station',
-    );
+    final result = await _openPicker(title: 'Select starting station');
 
     if (!mounted || result == null) {
       return;
@@ -318,9 +311,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
   }
 
   Future<void> _selectTo() async {
-    final result = await _openPicker(
-      title: 'Select destination',
-    );
+    final result = await _openPicker(title: 'Select destination');
 
     if (!mounted || result == null) {
       return;
@@ -333,9 +324,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
     });
   }
 
-  Future<PlannerStopOption?> _openPicker({
-    required String title,
-  }) {
+  Future<PlannerStopOption?> _openPicker({required String title}) {
     final repository = context.read<TransitRepository>();
 
     return showModalBottomSheet<PlannerStopOption>(
@@ -343,10 +332,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
       isScrollControlled: true,
       useSafeArea: true,
       builder: (_) {
-        return _PlannerStopPicker(
-          title: title,
-          repository: repository,
-        );
+        return _PlannerStopPicker(title: title, repository: repository);
       },
     );
   }
@@ -380,9 +366,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
       if (nearby.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              'No downloaded stops were found near your location.',
-            ),
+            content: Text('No downloaded stops were found near your location.'),
           ),
         );
 
@@ -433,11 +417,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
           : '$message '
               'Selected ${option.displayName} · ${option.lineName}.';
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(text),
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
     } catch (_) {
       if (!mounted || requestId != _locationRequestId) {
         return;
@@ -491,9 +471,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
         from.displayName.toUpperCase() == to.displayName.toUpperCase()) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Starting station and destination must be different.',
-          ),
+          content: Text('Starting station and destination must be different.'),
         ),
       );
       return;
@@ -513,7 +491,6 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
         PlannerHistoryEntry.fromOptions(from: from, to: to),
       );
       await RewardsStore.incrementMission('journey_planned');
-      await RewardsStore.addXp(5);
 
       if (!mounted || requestId != _planRequestId) return;
       setState(() => _recent = updatedRecent);
@@ -532,9 +509,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
       if (!mounted || requestId != _planRequestId) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Could not plan this journey. Please try again.',
-          ),
+          content: Text('Could not plan this journey. Please try again.'),
         ),
       );
     } finally {
@@ -564,16 +539,16 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
           children: [
             Text(
               'Plan your journey',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 6),
             Text(
               'Choose your stations and XploreMY will find a direct or one-transfer journey using downloaded GTFS data.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey.shade700,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade700),
             ),
             const SizedBox(height: 18),
             if (_savedAddresses.isNotEmpty) ...[
@@ -590,9 +565,9 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
               children: [
                 Text(
                   'Quick actions',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 const Spacer(),
                 TextButton.icon(
