@@ -1,5 +1,7 @@
 import '../core/config.dart';
 import '../core/geo.dart';
+import '../core/station_names.dart';
+import '../core/transit_mode.dart';
 import 'gtfs_api.dart';
 import 'local_store.dart';
 import 'models.dart';

@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
 class LocationService {
@@ -55,44 +54,24 @@ class LocationService {
           ),
         );
 
-        debugPrint(
-          'GPS current position: '
-          '${position.latitude}, '
-          '${position.longitude}',
-        );
-
         return LocationResult(
           lat: position.latitude,
           lon: position.longitude,
           isFallback: false,
         );
-      } catch (e) {
-        debugPrint(
-          'getCurrentPosition failed: $e',
-        );
-      }
+      } catch (_) {}
 
       try {
         final lastPosition = await Geolocator.getLastKnownPosition();
 
         if (lastPosition != null) {
-          debugPrint(
-            'GPS last known position: '
-            '${lastPosition.latitude}, '
-            '${lastPosition.longitude}',
-          );
-
           return LocationResult(
             lat: lastPosition.latitude,
             lon: lastPosition.longitude,
             isFallback: false,
           );
         }
-      } catch (e) {
-        debugPrint(
-          'getLastKnownPosition failed: $e',
-        );
-      }
+      } catch (_) {}
 
       return const LocationResult(
         lat: fallbackLat,
@@ -100,15 +79,7 @@ class LocationService {
         isFallback: true,
         message: 'Couldn’t get a GPS fix — showing stops around KL Sentral.',
       );
-    } catch (e, stackTrace) {
-      debugPrint(
-        'LocationService error: $e',
-      );
-
-      debugPrint(
-        '$stackTrace',
-      );
-
+    } catch (_) {
       return const LocationResult(
         lat: fallbackLat,
         lon: fallbackLon,

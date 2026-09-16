@@ -221,4 +221,46 @@ extension LocalGtfsJourneyStore on LocalGtfsStore {
         (row['hour'] as num).toInt(): (row['n'] as num).toInt(),
     };
   }
+
+  Future<List<TripTimetableEntry>> tripTimetable({
+    required String operatorId,
+    required String tripId,
+    required DateTime serviceDate,
+    int offsetSeconds = 0,
+  }) async {
+    final db = await database;
+    final rows = await db.rawQuery(
+      '''
+      SELECT
+        s.operator_id,
+        s.stop_id,
+        s.name,
+        s.lat,
+        s.lon,
+        st.sequence,
+        st.departure_seconds
+      FROM stop_times st
+      JOIN stops s
+        ON s.operator_id = st.operator_id
+        AND s.stop_id = st.stop_id
+      WHERE st.operator_id = ?
+        AND st.trip_id = ?
+      ORDER BY st.sequence ASC
+      ''',
+      [operatorId, tripId],
+    );
+
+    final base = DateTime(serviceDate.year, serviceDate.month, serviceDate.day);
+    return rows.map((row) {
+      final departureSeconds = (row['departure_seconds'] as num).toInt();
+      return TripTimetableEntry(
+        stop: GtfsStop.fromMap(row),
+        sequence: (row['sequence'] as num).toInt(),
+        departureSeconds: departureSeconds,
+        scheduledAt: base.add(
+          Duration(seconds: departureSeconds + offsetSeconds),
+        ),
+      );
+    }).toList();
+  }
 }

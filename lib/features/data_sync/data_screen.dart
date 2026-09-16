@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/config.dart';
 import '../../core/theme.dart';
+import '../../data/models.dart';
 import '../../data/transit_repository.dart';
 import '../../widgets/status_banner.dart';
 import '../rewards/rewards_store.dart';
@@ -17,6 +18,7 @@ class DataScreen extends StatefulWidget {
 
 class _DataScreenState extends State<DataScreen> {
   final Map<String, DateTime?> _lastSync = {};
+  final Map<String, GtfsCacheStats> _stats = {};
   String? _busyOperator;
   String? _message;
   bool _messageIsError = false;
@@ -30,7 +32,9 @@ class _DataScreenState extends State<DataScreen> {
   Future<void> _refreshMeta() async {
     final repo = context.read<TransitRepository>();
     for (final op in Operators.all) {
-      _lastSync[op.id] = await repo.lastSync(op.id);
+      final stats = await repo.cacheStats(op.id);
+      _stats[op.id] = stats;
+      _lastSync[op.id] = stats.lastSync;
     }
     if (mounted) setState(() {});
   }
@@ -124,7 +128,6 @@ class _DataScreenState extends State<DataScreen> {
     return DateTime.now().difference(date) > AppConfig.staticFeedTtl;
   }
 
-
   Widget _freshnessSummary() {
     final downloaded = _lastSync.values.whereType<DateTime>().length;
     final stale = _lastSync.values.whereType<DateTime>().where(_isStale).length;
@@ -141,9 +144,13 @@ class _DataScreenState extends State<DataScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Offline / Data Freshness', style: TextStyle(fontWeight: FontWeight.w700)),
+                  const Text('Offline / Data Freshness',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 4),
-                  Text('$downloaded/${Operators.all.length} operator feeds cached · $stale stale · $missing missing', style: const TextStyle(fontSize: 12.5, color: AppTheme.slate)),
+                  Text(
+                      '$downloaded/${Operators.all.length} operator feeds cached · $stale stale · $missing missing',
+                      style: const TextStyle(
+                          fontSize: 12.5, color: AppTheme.slate)),
                 ],
               ),
             ),
@@ -219,6 +226,7 @@ class _DataScreenState extends State<DataScreen> {
                 child: _OperatorDataCard(
                   operator: op,
                   lastSync: _lastSync[op.id],
+                  stats: _stats[op.id],
                   stale:
                       _lastSync[op.id] != null && _isStale(_lastSync[op.id]!),
                   formatter: formatter,
@@ -244,6 +252,7 @@ class _OperatorDataCard extends StatelessWidget {
   const _OperatorDataCard({
     required this.operator,
     required this.lastSync,
+    required this.stats,
     required this.stale,
     required this.formatter,
     required this.busy,
@@ -253,6 +262,7 @@ class _OperatorDataCard extends StatelessWidget {
 
   final Operator operator;
   final DateTime? lastSync;
+  final GtfsCacheStats? stats;
   final bool stale;
   final DateFormat formatter;
   final bool busy;
@@ -268,6 +278,10 @@ class _OperatorDataCard extends StatelessWidget {
     final realtime = operator.hasRealtime
         ? 'Live vehicle positions enabled'
         : 'Scheduled timetable only';
+    final cache = stats;
+    final counts = cache == null || !downloaded
+        ? 'No cached stop/trip statistics'
+        : '${cache.stopCount} stops · ${cache.tripCount} trips · ${cache.routeCount} routes';
 
     return Card(
       child: ListTile(
@@ -283,13 +297,14 @@ class _OperatorDataCard extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         subtitle: Text(
-          '$status\n$realtime',
+          '$status\n$counts\n$realtime',
           style: TextStyle(
             fontSize: 12.5,
             color: stale ? AppTheme.delayed : null,
           ),
         ),
         isThreeLine: true,
+        minVerticalPadding: 10,
         trailing: busy
             ? const SizedBox(
                 height: 20,

@@ -1,66 +1,91 @@
-XploreMY_Enhanced_Full - Validation Report
-==========================================
-Input archive SHA-256:
-  ebf07e13609d4ac523817fa7dceabc4eb363ac8a92bba34c1f1f05df98921f90
+XploreMY Final Submission v2 Validation
+=====================================
 
-Original-retention audit
-------------------------
-Original files inspected: 100
-Missing original files: 0
-Changed existing files: 11
-Added feature/test/docs files before this report: 12
-Unchanged original files: 89
-Result: PASS - every original file remains present.
+Base reviewed: XploreMY_Final_Submission
+Final output: XploreMY_Final_Submission_v2
 
-Added automated tests
----------------------
-Existing test files: 7
-New test files: 3
-Total test files: 10
-New coverage includes rewards level/XP/streak/claim/mission behavior,
-Home/Work travel preference persistence, departure reliability, and service spans.
-
-Checks attempted
-----------------
-1. flutter --version
-   Result: NOT RUNNABLE - Flutter CLI is not installed in this execution environment.
-
-2. flutter pub get
-   Result: NOT RUNNABLE - Flutter CLI is not installed.
-
-3. flutter analyze
-   Result: NOT RUNNABLE - Flutter CLI is not installed.
-
-4. flutter test
-   Result: NOT RUNNABLE - Flutter CLI is not installed.
-
-5. Android Gradle wrapper (bash android/gradlew -p android tasks --offline)
-   Result: BLOCKED - wrapper attempted to obtain Gradle 9.1.0 from services.gradle.org,
-   but outbound network/DNS is unavailable in this execution environment.
-
-Checks completed
-----------------
-1. Dart source structural validation across 82 Dart source/test files:
-   - relative import/part targets exist
-   - (), [], {} delimiter balance checked outside comments/strings
-   Result: PASS
-
-2. Supabase SQL lexical validation:
-   - 11 RLS-enable statements
-   - policy definitions present for enhanced and existing user-owned tables
-   - balanced SQL parentheses and dollar-quote markers
-   Result: PASS
-
-3. Dependency impact:
-   - no new pub dependency is required; enhanced features use packages already in pubspec.yaml
-   Result: PASS
-
-Important limitation
+Admin features added
 --------------------
-Because this container has no Flutter/Dart SDK and cannot download the Gradle distribution,
-this archive is source-structure validated but not Flutter-compiler/analyzer verified here.
-Run the following on a development machine with Flutter installed:
-  flutter pub get
-  flutter analyze
-  flutter test
-  flutter build apk --debug
+1. Admin Dashboard with Total Users, Pending Reviews, Open Reports and Active Alerts counts.
+2. User Management with search, status display, Suspend User and Restore Access.
+3. Admin accounts are protected from suspension.
+4. Suspended users are rejected during sign-in and signed out when a suspended profile is refreshed.
+5. Service Alert Management with Create, Read, Edit and Delete.
+6. Service alerts support operator targeting, severity, start time and optional end time.
+7. Existing Review Moderation remains available from the Admin Dashboard.
+8. User-facing Service Alerts continue to show active notices created by administrators.
+9. Supabase SQL now includes suspension fields, admin RPC functions and admin-only alert write policies.
+10. Added admin management model tests.
+
+Changed existing files
+----------------------
+- README.md
+- lib/features/auth/auth_service.dart
+- lib/features/auth/auth_validators.dart
+- lib/features/more/more_screen.dart
+- supabase/xploremy_enhanced.sql
+
+Added files
+-----------
+- docs/ADMIN_MANAGEMENT_FINAL.md
+- lib/features/admin/admin_dashboard_screen.dart
+- lib/features/admin/admin_management_service.dart
+- lib/features/admin/admin_service_alerts_screen.dart
+- lib/features/admin/admin_users_screen.dart
+- test/admin_management_models_test.dart
+
+Preservation check
+------------------
+Base files: 143
+Final files: 149
+Missing base files: 0
+None
+
+Static checks
+-------------
+- Dart files: 108
+- Flutter test files: 19
+- Missing relative Dart imports: 0
+- Undeclared third-party package imports: 0
+- Dart delimiter/string structural scan: PASS
+- Standalone Dart // / /// comments: 0
+- Dart block comments: 0
+- SQL -- comments: 0
+- SQL block comments: 0
+- TODO/FIXME/HACK markers: 0
+- debugPrint/print calls: 0
+- Admin Dashboard wiring: PASS
+- User Management wiring: PASS
+- Service Alert CRUD wiring: PASS
+- Admin RPC names present in Dart and SQL: PASS
+- Existing Review Moderation preserved: PASS
+- Existing project files removed: 0
+
+Environment limitation
+----------------------
+Flutter and Dart SDK executables are not installed in this execution environment. Therefore flutter analyze, flutter test and flutter build apk cannot be honestly executed here.
+
+Run on your machine
+-------------------
+flutter pub get
+dart format lib test
+flutter analyze
+flutter test
+flutter build apk --release
+
+Supabase requirement
+--------------------
+Run the latest supabase/xploremy_enhanced.sql before testing the new admin functions.
+
+Manual smoke tests
+------------------
+1. Admin -> More -> Admin dashboard.
+2. Confirm overview counts load.
+3. Admin -> User Management -> search user -> Suspend -> login as that user must be rejected.
+4. Admin -> User Management -> Restore Access -> user can sign in again.
+5. Confirm admin accounts cannot be suspended.
+6. Admin -> Service Alert Management -> Create alert.
+7. Normal user -> Service Alerts -> active alert is visible.
+8. Admin -> Edit alert -> normal user sees updated content.
+9. Admin -> Delete alert -> alert disappears.
+10. Admin -> Review Moderation -> existing pending/report/all workflows still work.

@@ -41,7 +41,7 @@ class _PlannerInfo extends StatelessWidget {
               height: 12,
             ),
             const Text(
-              'XploreMY can search direct services and one-transfer journeys using the GTFS timetable stored on your device.',
+              'XploreMY can search direct services and one-transfer journeys, including Bus ↔ LRT/MRT/KTM connections, using the GTFS timetable stored on your device.',
             ),
             const SizedBox(
               height: 12,
@@ -55,7 +55,7 @@ class _PlannerInfo extends StatelessWidget {
             ),
             const _InfoRow(
               icon: Icons.swap_horiz_outlined,
-              text: 'Supports direct and one-transfer journeys',
+              text: 'Supports direct, one-transfer and Bus ↔ Rail journeys',
             ),
             const SizedBox(
               height: 8,
@@ -150,7 +150,7 @@ class _NoJourney extends StatelessWidget {
               height: 8,
             ),
             Text(
-              'No valid direct or one-transfer journey was found using the currently downloaded timetable.',
+              'No valid direct or one-transfer journey was found using the currently downloaded timetable. For Bus ↔ Rail planning, make sure both operator feeds are downloaded.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.grey.shade700,

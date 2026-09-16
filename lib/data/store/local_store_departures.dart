@@ -269,7 +269,10 @@ extension LocalGtfsServiceSpanStore on LocalGtfsStore {
       limit: 5000,
     );
     if (rows.isEmpty) return null;
-    final values = rows.map((row) => (row['departure_seconds'] as num).toInt()).toList()..sort();
+    final values = rows
+        .map((row) => (row['departure_seconds'] as num).toInt())
+        .toList()
+      ..sort();
     return {'first': values.first, 'last': values.last};
   }
 }

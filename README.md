@@ -1,127 +1,90 @@
-# XploreMY
+# XploreMY Final Submission
 
-XploreMY is a Flutter public-transport companion for Malaysia built on official `api.data.gov.my` GTFS data, local SQLite caching, device location, OpenStreetMap tiles, and Supabase account services. The project supports SDG 9 by improving access to public-transport information through a unified mobile interface.
+XploreMY is a Flutter Android application that combines Malaysian Government open transport data from `api.data.gov.my` with local SQLite caching, Supabase account services, OpenStreetMap, journey planning, stop information, realtime vehicle positions where available, reviews, moderation, profile management and offline data tools.
 
-## Quick start
+## Run
 
 ```bash
 flutter pub get
-flutter run
-```
-
-The final application targets Android with application ID `com.xploremy.app`. Internet and location permissions are declared in `android/app/src/main/AndroidManifest.xml`.
-
-## Final features
-
-| Area | Implementation |
-| --- | --- |
-| User account | Gmail-only registration and login, email verification, forgot password, password recovery, profile editing, password change, logout |
-| Nearby stops | Device GPS, radius search, operator and rail/bus filters, list view and OpenStreetMap view |
-| Route planner | Direct journeys, one-transfer journeys, walking-transfer estimation, recent journeys and saved journeys |
-| Official GTFS | Downloads static GTFS feeds from `api.data.gov.my` and stores them in SQLite |
-| Service calendar | Uses `calendar.txt` and `calendar_dates.txt` to show services that run on the selected date |
-| Frequency schedules | Uses `frequencies.txt` when an operator publishes frequency-based service |
-| Stop detail | Station information, scheduled departures, countdowns, route destination, service activity and route map |
-| Realtime vehicles | Shows official GTFS-Realtime vehicle-position markers for operators with a configured public feed |
-| Favourite stops | Saves and removes favourite stops through Supabase and opens them again from Profile |
-| Offline data | Downloaded stops and timetables remain available without an Internet connection |
-| Appearance | Light, dark and system theme modes |
-
-## Departure and realtime behaviour
-
-XploreMY separates scheduled departures from realtime vehicle information. Departure times are calculated from the official static GTFS timetable. Operators with a configured GTFS-Realtime vehicle-position feed can additionally show live vehicle markers. The app does not label a scheduled departure as a live arrival when realtime TripUpdates are unavailable.
-
-Service activity on Stop Detail is a timetable-density indicator derived from the number of scheduled departures during the current hour compared with the busiest hour for that stop. It is not a passenger-count or crowd-measurement dataset.
-
-## Route planner scope
-
-The planner searches for direct journeys first. If no suitable direct journey is available, it can search for a one-transfer journey and estimate a short walking connection between nearby interchange stops. Walking-transfer time is an estimate based on stop distance rather than pedestrian turn-by-turn routing.
-
-## Data sources
-
-Static GTFS pattern:
-
-```text
-https://api.data.gov.my/gtfs-static/<agency>
-```
-
-Realtime vehicle positions pattern:
-
-```text
-https://api.data.gov.my/gtfs-realtime/vehicle-position/<agency>
-```
-
-Supported operator endpoints are defined in `lib/core/config.dart`. Static feeds are refreshed at most once per day unless the user forces an update from Offline data.
-
-Map tiles are provided by OpenStreetMap and the application displays `© OpenStreetMap contributors` on map views.
-
-## Supabase
-
-Client-side publishable Supabase settings are stored in `lib/core/config.dart`. A service-role key must never be placed in the mobile application.
-
-Expected tables:
-
-- `profiles`: `id`, `full_name`, `avatar_url`, `home_city`, `preferred_operator`
-- `favourite_stops`: `user_id`, `stop_id`, `stop_name`, `operator`, `created_at`
-
-Authentication is Gmail-only at the application-validation layer. Password-reset and email-verification links use the custom `xploremy://` deep-link scheme.
-For the final Supabase project, Email OTP/link expiration should be configured to `300` seconds so verification and password-reset links expire after five minutes.
-
-## Team module ownership
-
-| Member | Final module | Main responsibility |
-| --- | --- | --- |
-| Thu Jianee | Data & API / Offline Data | GTFS download, parsing, SQLite caching, service calendars, frequency data and offline synchronization |
-| Thean Zhi Hao | Nearby Stops & Route Planner | GPS, nearby-stop discovery, filters, map view, direct journey planning, one-transfer planning and journey history |
-| Yeoh Ka Hou | Stop Detail / Scheduled Departures & Realtime Vehicle Information | Stop detail, timetable retrieval, countdowns, route map, vehicle markers, service activity and favourite-stop integration |
-| Wong Kah Jian | User Account & Profile | Gmail authentication, verification, forgot/reset password, profile editing, password change, theme and logout |
-
-`lib/main.dart`, `lib/features/shell/app_shell.dart`, shared theme files and integration/testing are shared system-integration work.
-
-## Main project layout
-
-```text
-lib/
-  core/        configuration, theme, location and station helpers
-  data/        GTFS API, SQLite store, models and transport repositories
-  features/
-    auth/      Gmail authentication and password recovery
-    data_sync/ official GTFS feed download and offline management
-    home/      nearby stops, filtering and map view
-    planner/   direct and one-transfer journey planning
-    profile/   profile, password change, theme and saved stops
-    shell/     bottom navigation
-    stop/      stop detail, timetable and realtime vehicle map
-  widgets/     shared UI components
-```
-
-## Final checks
-
-Run before submission:
-
-```bash
 dart format lib test
 flutter analyze
 flutter test
-flutter build apk --release
-git diff --check
+flutter run
 ```
 
-Recommended smoke-test flow:
+For a release check:
+
+```bash
+flutter build apk --release
+```
+
+## Main modules
+
+| Member | Module | Main functions |
+| --- | --- | --- |
+| Wong Kah Jian | User Account & Profile Management | Register/login/logout, email verification, forgot/reset password, profile editing, avatar, saved-address CRUD, notification preferences, travel preferences, favorites-folder CRUD, saved stops, password change, delete account, theme |
+| Thean Zhi Hao | Nearby Stops & Journey Planner | GPS/nearby stops, search/filter/map, direct journey, one-transfer journey, Bus↔Rail walking transfer, Saved/Recent Journeys, Saved Addresses in Planner, Home→Work / Work→Home shortcuts, Clear All, recommendation sorting |
+| Yeoh Ka Hou | Stop Detail, Timetable, Realtime & Reviews | Stop detail, departure filter, future departures, first/last service, trip timetable, route timeline, realtime vehicle details/freshness/filtering, ratings/comments, review reports, admin moderation |
+| Thu Jianee | GTFS Data, Offline & Service/Data Status | GTFS download/parsing, SQLite cache, sync, operator freshness, last sync, cached stop/trip/route counts, realtime feed support, Offline screen, Service Alerts, About & Data Sources |
+
+## Navigation
 
 ```text
-Register -> Verify email -> Login
-Forgot password -> Reset password -> Login with new password
-Profile -> Change password -> Logout -> Login with new password
-Offline data -> Download operator feed
-Nearby -> Search/filter -> Map -> Open stop
-Stop Detail -> Departures -> Favourite
-Planner -> Direct journey -> One-transfer journey -> Saved/recent journeys
-Theme -> Light/Dark/System
+Nearby | Planner | Offline | Profile | More
 ```
 
-## Enhanced Full build
+`More` contains XploreRewards, Service Alerts, About & Data Sources, and the Admin Dashboard for admin accounts.
 
-The Enhanced Full variant adds XploreRewards, route/departure filtering, future departure lookup, trip timelines, first/last service information, realtime vehicle filtering/details/freshness, map legends, Home/Work travel preferences, Alerts Centre, expanded offline freshness reporting, and an About/Data Sources screen while retaining the original app flow.
+## Data management
 
-See `docs/ENHANCED_FEATURES.md` for the feature map and `supabase/xploremy_enhanced.sql` for optional Supabase tables and RLS policies.
+- Official static GTFS: stops, routes, trips, stop times, calendars and frequencies.
+- Official GTFS-Realtime vehicle positions for configured operators.
+- SQLite for downloaded transport data and offline access.
+- SharedPreferences for local-first user settings, rewards and selected personal features.
+- Supabase Auth for authentication and password recovery.
+- Supabase Database/RLS for profiles, favourite stops, reviews, reports, alerts and enhanced schema tables.
+- Supabase Storage for user avatars.
+
+## Supabase
+
+Run `supabase/xploremy_enhanced.sql` in the project SQL Editor after the core `profiles` and `favourite_stops` setup exists.
+
+Add these redirect URLs to Supabase Auth:
+
+```text
+xploremy://login-callback
+xploremy://reset-password
+```
+
+To assign an admin account, use the SQL Editor with the required authenticated user UUID:
+
+```sql
+update public.profiles
+set role = 'admin'
+where id = '<AUTH_USER_UUID>';
+```
+
+The Flutter client uses a Supabase publishable key only. Do not place a service-role key in the application.
+
+## Final functional scope
+
+- Profile Saved Addresses can be used directly as Planner origin or destination.
+- Home→Work and Work→Home shortcuts use saved Home/Work entries.
+- Clear All resets current Planner inputs/results without deleting saved data.
+- Journey Planner supports direct and one-transfer planning, including supported Bus↔Rail walking connections.
+- Stop Detail supports current/future departures, first/last service, trip timetable and route timeline.
+- Realtime vehicle positions are shown only for operators with configured realtime feeds.
+- Users may submit multiple stop comments. Each submission is moderated before becoming public.
+- Pending reviews can be edited/deleted. Approved, rejected and hidden reviews are delete-only for the owner.
+- Public average rating uses each user's latest approved rating so repeated comments do not multiply one user's weight.
+- Admin Dashboard shows total users, pending reviews, open reports and active service alerts.
+- Admin User Management can search users and suspend or restore account access.
+- Admin Service Alert Management supports create, read, edit and delete for operator notices.
+- Admin can approve/reject/hide/delete reviews and handle user reports.
+- Delete Account removes the authenticated Supabase account and returns safely to Login.
+
+## Submission checks
+
+The source version in this package has standalone source-code comments removed from Dart and SQL files to match the assignment requirement. URLs such as `https://...` remain because they are data values, not comments.
+
+Before submission on your own machine, run the full Flutter commands above and confirm the live demo on an Android emulator/device. Also confirm the private GitHub repository shows active contributions from every group member and prepare the required presentation and appendices.

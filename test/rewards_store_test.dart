@@ -10,7 +10,8 @@ void main() {
   });
 
   test('XP maps to level and progress', () {
-    const snapshot = RewardsSnapshot(xp: 750, streak: 3, lastActiveDate: null, claimedRewards: <String>{});
+    const snapshot = RewardsSnapshot(
+        xp: 750, streak: 3, lastActiveDate: null, claimedRewards: <String>{});
     expect(snapshot.level, 2);
     expect(snapshot.levelStartXp, 500);
     expect(snapshot.nextLevelXp, 1000);
@@ -19,7 +20,8 @@ void main() {
 
   test('check-in continues a daily streak and grants XP', () async {
     final yesterday = DateTime.now().subtract(const Duration(days: 1));
-    final day = '${yesterday.year.toString().padLeft(4, '0')}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}';
+    final day =
+        '${yesterday.year.toString().padLeft(4, '0')}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}';
     SharedPreferences.setMockInitialValues({
       'xplore_rewards_xp': 20,
       'xplore_rewards_streak': 2,

@@ -157,4 +157,24 @@ extension LocalGtfsFeedStore on LocalGtfsStore {
       },
     );
   }
+
+  Future<GtfsCacheStats> cacheStats(String operatorId) async {
+    final db = await database;
+
+    Future<int> count(String table) async {
+      final rows = await db.rawQuery(
+        'SELECT COUNT(*) AS n FROM $table WHERE operator_id = ?',
+        [operatorId],
+      );
+      return (rows.first['n'] as num?)?.toInt() ?? 0;
+    }
+
+    return GtfsCacheStats(
+      operatorId: operatorId,
+      lastSync: await lastSync(operatorId),
+      stopCount: await count('stops'),
+      routeCount: await count('routes'),
+      tripCount: await count('trips'),
+    );
+  }
 }
