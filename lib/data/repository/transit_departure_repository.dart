@@ -444,7 +444,8 @@ extension TransitDepartureRepository on TransitRepository {
 }
 
 extension TransitEnhancedDepartureRepository on TransitRepository {
-  DateTime? realtimeFetchedAt(String operatorId) => _vehicleFetchedAt[operatorId];
+  DateTime? realtimeFetchedAt(String operatorId) =>
+      _vehicleFetchedAt[operatorId];
 
   Future<ServiceSpan?> serviceSpanForStop({
     required String operatorId,
@@ -472,35 +473,66 @@ extension TransitEnhancedDepartureRepository on TransitRepository {
     GtfsStop? nearStop,
     double maxDistanceMetres = 7000,
   }) async {
-    final vehicles = await TransitDepartureRepository(this).liveVehicles(operatorId);
+    final vehicles =
+        await TransitDepartureRepository(this).liveVehicles(operatorId);
     if (vehicles.isEmpty) return const [];
 
     final cleanTrip = tripId?.trim();
     if (cleanTrip != null && cleanTrip.isNotEmpty) {
-      final exactTrip = vehicles.where((vehicle) => vehicle.tripId == cleanTrip).toList();
+      final exactTrip =
+          vehicles.where((vehicle) => vehicle.tripId == cleanTrip).toList();
       if (exactTrip.isNotEmpty) return exactTrip;
     }
 
     final cleanRoute = routeId?.trim();
     if (cleanRoute != null && cleanRoute.isNotEmpty) {
-      final sameRoute = vehicles.where((vehicle) => vehicle.routeId == cleanRoute).toList();
+      final sameRoute =
+          vehicles.where((vehicle) => vehicle.routeId == cleanRoute).toList();
       if (sameRoute.isNotEmpty) {
         if (nearStop == null) return sameRoute;
         final nearbyRoute = sameRoute.where((vehicle) {
-          return haversineMetres(vehicle.lat, vehicle.lon, nearStop.lat, nearStop.lon) <= maxDistanceMetres;
+          return haversineMetres(
+                  vehicle.lat, vehicle.lon, nearStop.lat, nearStop.lon) <=
+              maxDistanceMetres;
         }).toList();
-        return nearbyRoute.isNotEmpty ? nearbyRoute : sameRoute.take(20).toList();
+        return nearbyRoute.isNotEmpty
+            ? nearbyRoute
+            : sameRoute.take(20).toList();
       }
     }
 
     if (nearStop != null) {
       final nearby = vehicles.where((vehicle) {
-        return haversineMetres(vehicle.lat, vehicle.lon, nearStop.lat, nearStop.lon) <= maxDistanceMetres;
+        return haversineMetres(
+                vehicle.lat, vehicle.lon, nearStop.lat, nearStop.lon) <=
+            maxDistanceMetres;
       }).toList();
       if (nearby.isNotEmpty) return nearby;
       return const [];
     }
 
     return vehicles.take(20).toList();
+  }
+
+  Future<List<TripTimetableEntry>> tripTimetable({
+    required String operatorId,
+    required String tripId,
+    required DateTime serviceDate,
+    required String currentStopId,
+    required int currentScheduledSeconds,
+  }) async {
+    final templateSeconds = await _store.scheduledTimeForTripAtStop(
+      operatorId: operatorId,
+      tripId: tripId,
+      stopId: currentStopId,
+    );
+    final offsetSeconds =
+        templateSeconds == null ? 0 : currentScheduledSeconds - templateSeconds;
+    return _store.tripTimetable(
+      operatorId: operatorId,
+      tripId: tripId,
+      serviceDate: serviceDate,
+      offsetSeconds: offsetSeconds,
+    );
   }
 }

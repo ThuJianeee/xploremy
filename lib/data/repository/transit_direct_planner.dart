@@ -16,11 +16,128 @@ extension TransitDirectPlanner on TransitRepository {
       return direct;
     }
 
-    return TransitTransferPlanner(this)._planOneTransferJourneys(
+    final transfer =
+        await TransitTransferPlanner(this)._planOneTransferJourneys(
       from: from,
       to: to,
       limit: limit,
     );
+
+    if (transfer.isNotEmpty) {
+      return transfer;
+    }
+
+    return _planUsingAlternateStationRoutes(
+      from: from,
+      to: to,
+      limit: limit,
+    );
+  }
+
+  Future<List<JourneyPlan>> _planUsingAlternateStationRoutes({
+    required PlannerStopOption from,
+    required PlannerStopOption to,
+    required int limit,
+  }) async {
+    final fromOptions = await _routeAlternativesForStation(from);
+    final toOptions = await _routeAlternativesForStation(to);
+
+    if (fromOptions.length == 1 && toOptions.length == 1) {
+      return const [];
+    }
+
+    final plans = <JourneyPlan>[];
+
+    for (final fromOption in fromOptions.take(8)) {
+      for (final toOption in toOptions.take(8)) {
+        final isOriginalPair = fromOption.operatorId == from.operatorId &&
+            fromOption.routeId == from.routeId &&
+            toOption.operatorId == to.operatorId &&
+            toOption.routeId == to.routeId;
+
+        if (isOriginalPair) continue;
+
+        final direct = await planDirectJourneys(
+          from: fromOption,
+          to: toOption,
+          limit: limit,
+        );
+
+        if (direct.isNotEmpty) {
+          plans.addAll(direct);
+          continue;
+        }
+
+        final transfer =
+            await TransitTransferPlanner(this)._planOneTransferJourneys(
+          from: fromOption,
+          to: toOption,
+          limit: limit,
+        );
+        plans.addAll(transfer);
+
+        if (plans.length >= limit * 3) break;
+      }
+      if (plans.length >= limit * 3) break;
+    }
+
+    plans.sort((a, b) {
+      final end = a.journeyEndAt.compareTo(b.journeyEndAt);
+      if (end != 0) return end;
+      return a.duration.compareTo(b.duration);
+    });
+
+    final seen = <String>{};
+    final result = <JourneyPlan>[];
+
+    for (final plan in plans) {
+      final key = [
+        for (final leg in plan.legs)
+          '${leg.operatorId}:${leg.routeId}:${leg.tripId}',
+        plan.beforeFirstLeg?.fromStop.stopId ?? '',
+        plan.betweenLegs?.fromStop.stopId ?? '',
+        plan.afterLastLeg?.fromStop.stopId ?? '',
+        plan.departureAt.millisecondsSinceEpoch.toString(),
+      ].join('|');
+
+      if (!seen.add(key)) continue;
+      result.add(plan);
+      if (result.length >= limit) break;
+    }
+
+    return result;
+  }
+
+  Future<List<PlannerStopOption>> _routeAlternativesForStation(
+    PlannerStopOption selected,
+  ) async {
+    final search = await _store.searchPlannerStops(
+      cleanStationName(selected.displayName),
+      limit: 60,
+    );
+
+    final selectedKey = _plannerStationKey(selected.displayName);
+    final candidates = <PlannerStopOption>[selected];
+    final seen = <String>{
+      '${selected.operatorId}|${selected.routeId}|$selectedKey',
+    };
+
+    for (final option in search) {
+      if (_plannerStationKey(option.displayName) != selectedKey) continue;
+
+      final key = '${option.operatorId}|${option.routeId}|$selectedKey';
+      if (seen.add(key)) candidates.add(option);
+    }
+
+    return candidates;
+  }
+
+  String _plannerStationKey(String value) {
+    return cleanStationName(value)
+        .toUpperCase()
+        .replaceAll(RegExp(r'[^A-Z0-9]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
   }
 
   Future<List<JourneyPlan>> planDirectJourneys({

@@ -61,6 +61,8 @@ class Operators {
     name: 'Prasarana Rapid Rail KL (LRT/MRT/Monorail)',
     shortName: 'Rapid Rail KL',
     staticPath: '/gtfs-static/prasarana?category=rapid-rail-kl',
+    realtimePath:
+        '/gtfs-realtime/vehicle-position/prasarana?category=rapid-rail-kl',
   );
 
   static const rapidBusKl = Operator(

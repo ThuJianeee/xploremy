@@ -42,7 +42,17 @@ extension TransitTransferPlanner on TransitRepository {
               secondStop.name,
             );
 
-        final allowedDistance = sameStationName ? 650.0 : 350.0;
+        final knownWalkingInterchange = areKnownWalkingInterchangeNames(
+          firstStop.name,
+          secondStop.name,
+        );
+
+        final allowedDistance = transferWalkingRadiusMetres(
+          firstRouteType: from.routeType,
+          secondRouteType: to.routeType,
+          sameStationName: sameStationName,
+          knownWalkingInterchange: knownWalkingInterchange,
+        );
 
         if (distance > allowedDistance) {
           continue;
@@ -54,6 +64,7 @@ extension TransitTransferPlanner on TransitRepository {
             secondStop: secondStop,
             distanceMetres: distance,
             sameStationName: sameStationName,
+            knownWalkingInterchange: knownWalkingInterchange,
           ),
         );
       }
@@ -61,8 +72,17 @@ extension TransitTransferPlanner on TransitRepository {
 
     transferCandidates.sort(
       (a, b) {
+        if (a.knownWalkingInterchange != b.knownWalkingInterchange) {
+          return a.knownWalkingInterchange ? -1 : 1;
+        }
+
         if (a.sameStationName != b.sameStationName) {
           return a.sameStationName ? -1 : 1;
+        }
+
+        final multimodal = isBusRailPair(from.routeType, to.routeType);
+        if (multimodal) {
+          return a.distanceMetres.compareTo(b.distanceMetres);
         }
 
         return a.distanceMetres.compareTo(

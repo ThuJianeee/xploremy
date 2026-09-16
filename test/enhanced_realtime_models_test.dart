@@ -5,9 +5,17 @@ void main() {
   test('departure reliability uses live delay thresholds', () {
     final now = DateTime(2026, 9, 15, 8);
     Departure build(int? delay) => Departure(
-      operatorId: 'op', tripId: 't', routeLabel: 'R', routeLongName: 'Route', headsign: 'Town',
-      scheduledSeconds: 8 * 3600, scheduledAt: now, secondsUntil: 0, routeType: 3, liveDelaySeconds: delay,
-    );
+          operatorId: 'op',
+          tripId: 't',
+          routeLabel: 'R',
+          routeLongName: 'Route',
+          headsign: 'Town',
+          scheduledSeconds: 8 * 3600,
+          scheduledAt: now,
+          secondsUntil: 0,
+          routeType: 3,
+          liveDelaySeconds: delay,
+        );
 
     expect(build(null).reliability, Reliability.scheduled);
     expect(build(60).reliability, Reliability.onTime);

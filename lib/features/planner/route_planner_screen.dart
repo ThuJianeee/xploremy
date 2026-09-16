@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -5,6 +6,8 @@ import '../../core/config.dart';
 import '../../core/location_service.dart';
 import '../../data/models.dart';
 import '../../data/transit_repository.dart';
+import '../auth/auth_service.dart';
+import '../profile/settings/saved_addresses.dart';
 import '../rewards/rewards_store.dart';
 import '../settings/travel_preferences.dart';
 import 'planner_history.dart';
@@ -14,6 +17,7 @@ part 'widgets/planner_selector.dart';
 part 'widgets/planner_input_card.dart';
 part 'widgets/recent_journeys.dart';
 part 'widgets/saved_journeys.dart';
+part 'widgets/saved_addresses_planner_card.dart';
 part 'widgets/planner_history_actions.dart';
 part 'widgets/planner_stop_picker.dart';
 part 'widgets/planner_info.dart';
@@ -28,7 +32,12 @@ enum _JourneySort { recommended, fastest, fewestTransfers, leastWalking }
 class RoutePlannerScreen extends StatefulWidget {
   const RoutePlannerScreen({
     super.key,
+    this.initialJourney,
+    this.refreshListenable,
   });
+
+  final PlannerHistoryEntry? initialJourney;
+  final ValueListenable<int>? refreshListenable;
 
   @override
   State<RoutePlannerScreen> createState() {
@@ -43,11 +52,14 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
   bool _locating = false;
   bool _planning = false;
   bool _searched = false;
+  int _planRequestId = 0;
+  int _locationRequestId = 0;
 
   List<JourneyPlan> _journeys = const [];
   _JourneySort _sort = _JourneySort.recommended;
   List<PlannerHistoryEntry> _recent = const [];
   List<PlannerHistoryEntry> _saved = const [];
+  List<SavedAddressEntry> _savedAddresses = const [];
   TravelPreferences _preferences = const TravelPreferences();
 
   void _applyRestoredJourney(
@@ -86,6 +98,45 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
     TravelPreferencesStore.load().then((value) {
       if (mounted) setState(() => _preferences = value);
     });
+    widget.refreshListenable?.addListener(_refreshProfilePlannerData);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _refreshProfilePlannerData();
+    });
+    final initialJourney = widget.initialJourney;
+    if (initialJourney != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _restoreRecent(initialJourney);
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant RoutePlannerScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshListenable != widget.refreshListenable) {
+      oldWidget.refreshListenable?.removeListener(_refreshProfilePlannerData);
+      widget.refreshListenable?.addListener(_refreshProfilePlannerData);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.refreshListenable?.removeListener(_refreshProfilePlannerData);
+    super.dispose();
+  }
+
+  Future<void> _refreshProfilePlannerData() async {
+    if (!mounted) return;
+    final auth = context.read<AuthService>();
+    final userId = auth.user?.id ?? 'guest';
+    final addresses = await SavedAddressStore.load(userId);
+    final preferences = await TravelPreferencesStore.load();
+    if (!mounted) return;
+    setState(() {
+      _savedAddresses = addresses;
+      _preferences = preferences;
+    });
   }
 
   List<JourneyPlan> get _sortedJourneys {
@@ -109,8 +160,10 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
         if (_preferences.preferFewerTransfers ||
             _preferences.preferLessWalking ||
             _preferences.preferRail ||
+            _preferences.defaultTransport != DefaultTransport.any ||
             _preferences.accessibleMode) {
-          journeys.sort((a, b) => _preferenceScore(a).compareTo(_preferenceScore(b)));
+          journeys.sort(
+              (a, b) => _preferenceScore(a).compareTo(_preferenceScore(b)));
         }
         break;
     }
@@ -131,22 +184,86 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
     if (_preferences.preferLessWalking || _preferences.accessibleMode) {
       score += (_walkingMetres(journey) / 150).round();
     }
-    if (_preferences.preferRail) {
-      final hasRail = journey.legs.any((leg) => leg.routeType == 0 || leg.routeType == 1 || leg.routeType == 2);
+    final prefersRail = _preferences.preferRail ||
+        _preferences.defaultTransport == DefaultTransport.rail;
+    if (prefersRail) {
+      final hasRail = journey.legs.any(
+        (leg) => leg.routeType == 0 || leg.routeType == 1 || leg.routeType == 2,
+      );
       if (!hasRail) score += 18;
+    }
+    if (_preferences.defaultTransport == DefaultTransport.bus) {
+      final hasBus = journey.legs.any((leg) => leg.routeType == 3);
+      if (!hasBus) score += 18;
     }
     return score;
   }
 
+  SavedAddressEntry? get _homeAddress {
+    for (final item in _savedAddresses) {
+      if (item.role == SavedAddressRole.home) return item;
+    }
+    return null;
+  }
+
+  SavedAddressEntry? get _workAddress {
+    for (final item in _savedAddresses) {
+      if (item.role == SavedAddressRole.work) return item;
+    }
+    return null;
+  }
+
+  PlannerStopOption? get _homeStop => _homeAddress?.stop ?? _preferences.home;
+  PlannerStopOption? get _workStop => _workAddress?.stop ?? _preferences.work;
+
   void _useHomeWork({required bool homeToWork}) {
-    final home = _preferences.home;
-    final work = _preferences.work;
+    final home = _homeStop;
+    final work = _workStop;
     if (home == null || work == null) return;
     setState(() {
       _from = homeToWork ? home : work;
       _to = homeToWork ? work : home;
       _journeys = const [];
       _searched = false;
+      _sort = _JourneySort.recommended;
+    });
+  }
+
+  void _useSavedAddress(
+    SavedAddressEntry address, {
+    required bool asOrigin,
+  }) {
+    setState(() {
+      if (asOrigin) {
+        _from = address.stop;
+      } else {
+        _to = address.stop;
+      }
+      _journeys = const [];
+      _searched = false;
+      _sort = _JourneySort.recommended;
+    });
+  }
+
+  void _clearPlanner() {
+    if (_from == null &&
+        _to == null &&
+        !_searched &&
+        _journeys.isEmpty &&
+        !_planning &&
+        !_locating) {
+      return;
+    }
+    _planRequestId++;
+    _locationRequestId++;
+    setState(() {
+      _from = null;
+      _to = null;
+      _journeys = const [];
+      _searched = false;
+      _planning = false;
+      _locating = false;
+      _sort = _JourneySort.recommended;
     });
   }
 
@@ -239,6 +356,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
       return;
     }
 
+    final requestId = ++_locationRequestId;
     final repository = context.read<TransitRepository>();
 
     setState(() {
@@ -255,7 +373,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
         limit: 20,
       );
 
-      if (!mounted) {
+      if (!mounted || requestId != _locationRequestId) {
         return;
       }
 
@@ -285,7 +403,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
         }
       }
 
-      if (!mounted) {
+      if (!mounted || requestId != _locationRequestId) {
         return;
       }
 
@@ -321,7 +439,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
         ),
       );
     } catch (_) {
-      if (!mounted) {
+      if (!mounted || requestId != _locationRequestId) {
         return;
       }
 
@@ -333,7 +451,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
         ),
       );
     } finally {
-      if (mounted) {
+      if (mounted && requestId == _locationRequestId) {
         setState(() {
           _locating = false;
         });
@@ -365,7 +483,6 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
           ),
         ),
       );
-
       return;
     }
 
@@ -379,45 +496,40 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
           ),
         ),
       );
-
       return;
     }
 
+    final requestId = ++_planRequestId;
     final repository = context.read<TransitRepository>();
 
-    final updatedRecent = await PlannerHistoryStore.add(
-      PlannerHistoryEntry.fromOptions(from: from, to: to),
-    );
-    await RewardsStore.incrementMission('journey_planned');
-    await RewardsStore.addXp(5);
-
-    if (!mounted) return;
     setState(() {
-      _recent = updatedRecent;
       _planning = true;
       _searched = true;
       _journeys = const [];
     });
 
     try {
+      final updatedRecent = await PlannerHistoryStore.add(
+        PlannerHistoryEntry.fromOptions(from: from, to: to),
+      );
+      await RewardsStore.incrementMission('journey_planned');
+      await RewardsStore.addXp(5);
+
+      if (!mounted || requestId != _planRequestId) return;
+      setState(() => _recent = updatedRecent);
+
       final journeys = await repository.planJourneys(
         from: from,
         to: to,
         limit: 5,
       );
 
-      if (!mounted) {
-        return;
-      }
-
+      if (!mounted || requestId != _planRequestId) return;
       setState(() {
         _journeys = journeys;
       });
     } catch (_) {
-      if (!mounted) {
-        return;
-      }
-
+      if (!mounted || requestId != _planRequestId) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -426,7 +538,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
         ),
       );
     } finally {
-      if (mounted) {
+      if (mounted && requestId == _planRequestId) {
         setState(() {
           _planning = false;
         });
@@ -442,6 +554,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
       appBar: AppBar(title: const Text('Route planner')),
       body: RefreshIndicator(
         onRefresh: () async {
+          await _refreshProfilePlannerData();
           if (_from != null && _to != null) await _plan();
         },
         child: ListView(
@@ -463,7 +576,35 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
                   ),
             ),
             const SizedBox(height: 18),
-            if (_preferences.home != null && _preferences.work != null) ...[
+            if (_savedAddresses.isNotEmpty) ...[
+              _SavedAddressesPlannerCard(
+                addresses: _savedAddresses,
+                onUseAsFrom: (address) =>
+                    _useSavedAddress(address, asOrigin: true),
+                onUseAsTo: (address) =>
+                    _useSavedAddress(address, asOrigin: false),
+              ),
+              const SizedBox(height: 12),
+            ],
+            Row(
+              children: [
+                Text(
+                  'Quick actions',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: (_from != null || _to != null || _searched)
+                      ? _clearPlanner
+                      : null,
+                  icon: const Icon(Icons.clear_all, size: 18),
+                  label: const Text('Clear all'),
+                ),
+              ],
+            ),
+            if (_homeStop != null && _workStop != null) ...[
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -481,7 +622,8 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-            ],
+            ] else
+              const SizedBox(height: 4),
             _PlannerInputCard(
               from: _from,
               to: _to,

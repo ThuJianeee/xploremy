@@ -244,3 +244,35 @@ class GtfsFrequency {
     };
   }
 }
+
+class TripTimetableEntry {
+  const TripTimetableEntry({
+    required this.stop,
+    required this.sequence,
+    required this.departureSeconds,
+    required this.scheduledAt,
+  });
+
+  final GtfsStop stop;
+  final int sequence;
+  final int departureSeconds;
+  final DateTime scheduledAt;
+}
+
+class GtfsCacheStats {
+  const GtfsCacheStats({
+    required this.operatorId,
+    required this.lastSync,
+    required this.stopCount,
+    required this.routeCount,
+    required this.tripCount,
+  });
+
+  final String operatorId;
+  final DateTime? lastSync;
+  final int stopCount;
+  final int routeCount;
+  final int tripCount;
+
+  bool get isCached => lastSync != null;
+}

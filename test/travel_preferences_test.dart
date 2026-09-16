@@ -11,15 +11,30 @@ void main() {
   });
 
   test('travel preferences and Home/Work round-trip', () async {
-    const stop = GtfsStop(operatorId: 'rapid-rail-kl', stopId: 'A', name: 'Home Station', lat: 3.1, lon: 101.6);
-    const home = PlannerStopOption(displayName: 'Home Station', operatorId: 'rapid-rail-kl', routeId: 'KJL', routeShortName: 'KJL', routeLongName: 'Kelana Jaya', routeType: 1, stops: [stop]);
-    const value = TravelPreferences(preferFewerTransfers: true, preferRail: true, home: home);
+    const stop = GtfsStop(
+        operatorId: 'rapid-rail-kl',
+        stopId: 'A',
+        name: 'Home Station',
+        lat: 3.1,
+        lon: 101.6);
+    const home = PlannerStopOption(
+        displayName: 'Home Station',
+        operatorId: 'rapid-rail-kl',
+        routeId: 'KJL',
+        routeShortName: 'KJL',
+        routeLongName: 'Kelana Jaya',
+        routeType: 1,
+        stops: [stop]);
+    const value = TravelPreferences(
+        preferFewerTransfers: true,
+        defaultTransport: DefaultTransport.rail,
+        home: home);
 
     await TravelPreferencesStore.save(value);
     final loaded = await TravelPreferencesStore.load();
 
     expect(loaded.preferFewerTransfers, isTrue);
-    expect(loaded.preferRail, isTrue);
+    expect(loaded.defaultTransport, DefaultTransport.rail);
     expect(loaded.home?.primaryStop.stopId, 'A');
     expect(loaded.home?.lineName, 'Kelana Jaya');
   });

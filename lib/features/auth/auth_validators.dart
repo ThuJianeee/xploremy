@@ -107,6 +107,11 @@ class AuthValidators {
       return 'Please confirm your Gmail address first.';
     }
 
+    if (lower.contains('account has been suspended') ||
+        lower.contains('account suspended')) {
+      return 'This account has been suspended by an administrator.';
+    }
+
     if (lower.contains('user already registered')) {
       return 'An account already exists for this Gmail address.';
     }

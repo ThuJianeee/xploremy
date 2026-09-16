@@ -13,6 +13,10 @@ extension TransitSyncRepository on TransitRepository {
     return _store.cachedOperatorIds();
   }
 
+  Future<GtfsCacheStats> cacheStats(String operatorId) {
+    return _store.cacheStats(operatorId);
+  }
+
   Future<SyncResult> syncOperator(
     Operator op, {
     bool force = false,

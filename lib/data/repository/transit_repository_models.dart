@@ -6,6 +6,7 @@ class _TransferCandidate {
     required this.secondStop,
     required this.distanceMetres,
     required this.sameStationName,
+    required this.knownWalkingInterchange,
   });
 
   final GtfsStop firstStop;
@@ -13,6 +14,7 @@ class _TransferCandidate {
 
   final double distanceMetres;
   final bool sameStationName;
+  final bool knownWalkingInterchange;
 }
 
 class SyncResult {

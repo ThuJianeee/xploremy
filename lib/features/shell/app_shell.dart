@@ -19,15 +19,17 @@ class _AppShellState extends State<AppShell> {
 
   int _index = 0;
   late final ProfileEditController _profileEditController;
+  late final ValueNotifier<int> _plannerRefreshNotifier;
   late final List<Widget> _pages;
 
   @override
   void initState() {
     super.initState();
     _profileEditController = ProfileEditController();
+    _plannerRefreshNotifier = ValueNotifier<int>(0);
     _pages = <Widget>[
       const HomeScreen(),
-      const RoutePlannerScreen(),
+      RoutePlannerScreen(refreshListenable: _plannerRefreshNotifier),
       const DataScreen(),
       ProfileScreen(editController: _profileEditController),
       const MoreScreen(),
@@ -37,6 +39,7 @@ class _AppShellState extends State<AppShell> {
   @override
   void dispose() {
     _profileEditController.dispose();
+    _plannerRefreshNotifier.dispose();
     super.dispose();
   }
 
@@ -74,6 +77,9 @@ class _AppShellState extends State<AppShell> {
 
     if (!mounted) return;
     setState(() => _index = nextIndex);
+    if (nextIndex == 1) {
+      _plannerRefreshNotifier.value++;
+    }
   }
 
   @override

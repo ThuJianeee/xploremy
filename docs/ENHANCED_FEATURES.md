@@ -22,3 +22,12 @@ Existing Supabase Auth/profile/favourite-stop behavior is preserved. New prefere
 ## Validation note
 
 The modification environment did not contain the Flutter or Dart CLI. Commands for `flutter pub get`, `flutter analyze` and `flutter test` were attempted but could not execute because `flutter` was not installed. A source-structure validation report is included in `docs/VALIDATION_REPORT.txt`.
+
+
+## Profile management additions
+
+- Saved Address CRUD: create/read/update/delete Home, Work and other frequent GTFS stops; Home/Work sync back to Journey Planner preferences.
+- Notification Management: category toggles for service, journey, departure, rewards and data-freshness alerts plus reminder lead time.
+- Default Preferred Transport: Any/Rail/Bus setting used by the Recommended journey ranking.
+- Secure Delete Account: typed confirmation in Account Settings and a Supabase `delete_my_account()` RPC that deletes only the current authenticated user without exposing a service-role key.
+- Optional Supabase schema for `saved_addresses` and `notification_preferences` is included for future cross-device sync; the current app stores these settings locally for offline-first use.
