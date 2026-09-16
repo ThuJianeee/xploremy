@@ -47,11 +47,12 @@ class _DataScreenState extends State<DataScreen> {
     });
 
     try {
-      final result =
-          await context.read<TransitRepository>().syncOperator(op, force: true);
+      final result = await context.read<TransitRepository>().syncOperator(
+            op,
+            force: true,
+          );
       _message = '${op.shortName}: ${result.stops} stops cached.';
       await RewardsStore.incrementMission('data_sync');
-      await RewardsStore.addXp(5);
     } catch (_) {
       _message =
           '${op.shortName} could not be updated. Existing cached data was kept.';
@@ -79,7 +80,6 @@ class _DataScreenState extends State<DataScreen> {
     final ok = results.where((result) => result.ok).length;
     if (ok > 0) {
       await RewardsStore.incrementMission('data_sync');
-      await RewardsStore.addXp(5);
     }
     await _refreshMeta();
 
@@ -144,13 +144,18 @@ class _DataScreenState extends State<DataScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Offline / Data Freshness',
-                      style: TextStyle(fontWeight: FontWeight.w700)),
+                  const Text(
+                    'Offline / Data Freshness',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
                   const SizedBox(height: 4),
                   Text(
-                      '$downloaded/${Operators.all.length} operator feeds cached · $stale stale · $missing missing',
-                      style: const TextStyle(
-                          fontSize: 12.5, color: AppTheme.slate)),
+                    '$downloaded/${Operators.all.length} operator feeds cached · $stale stale · $missing missing',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: AppTheme.slate,
+                    ),
+                  ),
                 ],
               ),
             ),
