@@ -49,7 +49,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
         TravelPreferencesStore.clear(),
         PlannerHistoryStore.clear(),
         PlannerSavedStore.clear(),
-        RewardsStore.clear(),
+        RewardsStore.clear(userId: userId),
       ].map((future) async {
         try {
           await future;
