@@ -55,79 +55,105 @@ class RewardsStore {
   static const _lastActiveKey = 'xplore_rewards_last_active';
   static const _missionsKey = 'xplore_rewards_missions';
   static const _claimedKey = 'xplore_rewards_claimed';
+  static String? _userId;
+
+  static void setUserId(String? userId) {
+    final value = userId?.trim();
+    _userId = value == null || value.isEmpty ? null : value;
+  }
+
+  static String _scopedKey(String base, {String? userId}) {
+    final value = (userId ?? _userId)?.trim();
+    final scope = value == null || value.isEmpty ? 'guest' : value;
+    return '$base::$scope';
+  }
 
   static String _dayKey(DateTime date) =>
       '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
-  static Future<RewardsSnapshot> load() async {
+  static Future<RewardsSnapshot> load({String? userId}) async {
     final prefs = await SharedPreferences.getInstance();
     return RewardsSnapshot(
-      xp: prefs.getInt(_xpKey) ?? 0,
-      streak: prefs.getInt(_streakKey) ?? 0,
-      lastActiveDate: prefs.getString(_lastActiveKey),
+      xp: prefs.getInt(_scopedKey(_xpKey, userId: userId)) ?? 0,
+      streak: prefs.getInt(_scopedKey(_streakKey, userId: userId)) ?? 0,
+      lastActiveDate:
+          prefs.getString(_scopedKey(_lastActiveKey, userId: userId)),
       claimedRewards:
-          (prefs.getStringList(_claimedKey) ?? const <String>[]).toSet(),
+          (prefs.getStringList(_scopedKey(_claimedKey, userId: userId)) ??
+                  const <String>[])
+              .toSet(),
     );
   }
 
   static Future<RewardsSnapshot> checkIn() async {
+    final userId = _userId;
     final prefs = await SharedPreferences.getInstance();
     final now = DateTime.now();
     final today = _dayKey(now);
     final yesterday = _dayKey(now.subtract(const Duration(days: 1)));
-    final last = prefs.getString(_lastActiveKey);
-    var streak = prefs.getInt(_streakKey) ?? 0;
-    var xp = prefs.getInt(_xpKey) ?? 0;
+    final lastActiveKey = _scopedKey(_lastActiveKey, userId: userId);
+    final streakKey = _scopedKey(_streakKey, userId: userId);
+    final xpKey = _scopedKey(_xpKey, userId: userId);
+    final last = prefs.getString(lastActiveKey);
+    var streak = prefs.getInt(streakKey) ?? 0;
+    var xp = prefs.getInt(xpKey) ?? 0;
     if (last != today) {
       streak = last == yesterday ? streak + 1 : 1;
       xp += 10;
-      await prefs.setInt(_streakKey, streak);
-      await prefs.setInt(_xpKey, xp);
-      await prefs.setString(_lastActiveKey, today);
-      await incrementMission('daily_checkin');
+      await prefs.setInt(streakKey, streak);
+      await prefs.setInt(xpKey, xp);
+      await prefs.setString(lastActiveKey, today);
+      await incrementMission('daily_checkin', userId: userId);
     }
-    return load();
+    return load(userId: userId);
   }
 
-  static Future<void> addXp(int amount) async {
+  static Future<void> addXp(int amount, {String? userId}) async {
     if (amount <= 0) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_xpKey, (prefs.getInt(_xpKey) ?? 0) + amount);
+    final key = _scopedKey(_xpKey, userId: userId);
+    await prefs.setInt(key, (prefs.getInt(key) ?? 0) + amount);
   }
 
-  static Future<Map<String, int>> missionProgress() async {
+  static Future<Map<String, int>> missionProgress({String? userId}) async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_missionsKey);
+    final raw = prefs.getString(_scopedKey(_missionsKey, userId: userId));
     if (raw == null || raw.isEmpty) return <String, int>{};
     final decoded = jsonDecode(raw) as Map<String, dynamic>;
     return decoded.map((key, value) => MapEntry(key, (value as num).toInt()));
   }
 
-  static Future<void> incrementMission(String id, {int by = 1}) async {
+  static Future<void> incrementMission(String id,
+      {int by = 1, String? userId}) async {
+    final scopedUserId = userId ?? _userId;
     final prefs = await SharedPreferences.getInstance();
-    final progress = await missionProgress();
+    final progress = await missionProgress(userId: scopedUserId);
     progress[id] = (progress[id] ?? 0) + by;
-    await prefs.setString(_missionsKey, jsonEncode(progress));
+    await prefs.setString(
+        _scopedKey(_missionsKey, userId: scopedUserId), jsonEncode(progress));
   }
 
-  static Future<void> clear() async {
+  static Future<void> clear({String? userId}) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_xpKey);
-    await prefs.remove(_streakKey);
-    await prefs.remove(_lastActiveKey);
-    await prefs.remove(_missionsKey);
-    await prefs.remove(_claimedKey);
+    await prefs.remove(_scopedKey(_xpKey, userId: userId));
+    await prefs.remove(_scopedKey(_streakKey, userId: userId));
+    await prefs.remove(_scopedKey(_lastActiveKey, userId: userId));
+    await prefs.remove(_scopedKey(_missionsKey, userId: userId));
+    await prefs.remove(_scopedKey(_claimedKey, userId: userId));
   }
 
   static Future<bool> claim(String id, int costXp) async {
+    final userId = _userId;
     final prefs = await SharedPreferences.getInstance();
-    final snapshot = await load();
+    final snapshot = await load(userId: userId);
     if (snapshot.claimedRewards.contains(id) || snapshot.xp < costXp) {
       return false;
     }
     final claimed = {...snapshot.claimedRewards, id};
-    await prefs.setInt(_xpKey, snapshot.xp - costXp);
-    await prefs.setStringList(_claimedKey, claimed.toList());
+    await prefs.setInt(
+        _scopedKey(_xpKey, userId: userId), snapshot.xp - costXp);
+    await prefs.setStringList(
+        _scopedKey(_claimedKey, userId: userId), claimed.toList());
     return true;
   }
 

@@ -1,11 +1,11 @@
 import 'dart:async';
-
 import 'package:app_links/app_links.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/config.dart';
+import '../rewards/rewards_store.dart';
 
 bool isPasswordResetDeepLink(Uri? uri) {
   if (uri == null) return false;
@@ -16,6 +16,7 @@ bool isPasswordResetDeepLink(Uri? uri) {
 class AuthService extends ChangeNotifier {
   AuthService() {
     _session = _client.auth.currentSession;
+    RewardsStore.setUserId(_session?.user.id);
     _listenForAuthChanges();
     _listenForRecoveryLinks();
 
@@ -33,6 +34,7 @@ class AuthService extends ChangeNotifier {
   void _listenForAuthChanges() {
     _authSubscription = _client.auth.onAuthStateChange.listen((state) {
       _session = state.session;
+      RewardsStore.setUserId(state.session?.user.id);
 
       if (_deferAccountDeletionNotification) {
         if (state.event == AuthChangeEvent.signedOut || state.session == null) {
@@ -148,6 +150,7 @@ class AuthService extends ChangeNotifier {
       password: password,
     );
     final userId = response.user?.id;
+    RewardsStore.setUserId(userId);
     if (userId == null) return;
     final profile =
         await _client.from('profiles').select().eq('id', userId).maybeSingle();
@@ -159,6 +162,7 @@ class AuthService extends ChangeNotifier {
 
   Future<void> signOut() async {
     await _client.auth.signOut();
+    RewardsStore.setUserId(null);
   }
 
   Future<void> deleteAccount({bool deferUiNotification = false}) async {
@@ -181,6 +185,7 @@ class AuthService extends ChangeNotifier {
       } catch (_) {}
 
       _session = null;
+      RewardsStore.setUserId(null);
       _profile = null;
       _favourites = const [];
       _isPasswordRecovery = false;
@@ -230,6 +235,7 @@ class AuthService extends ChangeNotifier {
     await _client.auth.signOut();
     _isPasswordRecovery = false;
     _session = null;
+    RewardsStore.setUserId(null);
     notifyListeners();
   }
 
@@ -255,6 +261,7 @@ class AuthService extends ChangeNotifier {
       if (profile.isSuspended) {
         await _client.auth.signOut();
         _session = null;
+        RewardsStore.setUserId(null);
         _profile = null;
         _favourites = const [];
         notifyListeners();

@@ -40,7 +40,7 @@ Nearby | Planner | Offline | Profile | More
 - Official static GTFS: stops, routes, trips, stop times, calendars and frequencies.
 - Official GTFS-Realtime vehicle positions for configured operators.
 - SQLite for downloaded transport data and offline access.
-- SharedPreferences for local-first user settings, rewards and selected personal features.
+- SharedPreferences for local-first user settings, per-user isolated rewards and selected personal features.
 - Supabase Auth for authentication and password recovery.
 - Supabase Database/RLS for profiles, favourite stops, reviews, reports, alerts and enhanced schema tables.
 - Supabase Storage for user avatars.
@@ -88,3 +88,7 @@ The Flutter client uses a Supabase publishable key only. Do not place a service-
 The source version in this package has standalone source-code comments removed from Dart and SQL files to match the assignment requirement. URLs such as `https://...` remain because they are data values, not comments.
 
 Before submission on your own machine, run the full Flutter commands above and confirm the live demo on an Android emulator/device. Also confirm the private GitHub repository shows active contributions from every group member and prepare the required presentation and appendices.
+
+## Final v5 reward isolation fix
+
+XploreRewards XP, streaks, missions and claimed rewards are scoped by the authenticated Supabase user ID so accounts on the same device no longer share progress. Legacy device-wide reward keys are ignored.
